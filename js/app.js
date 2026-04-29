@@ -57,6 +57,10 @@ const App = (() => {
   function _refresh() {
     _updateHeader();
     _renderPage();
+    // 表示月のデータがクラウドと同期されているか確認（必要なときのみ1 read）
+    if (typeof FirestoreDB !== 'undefined' && FirestoreDB.isReady()) {
+      FirestoreDB.ensureMonth(state.year, state.month).catch(() => {});
+    }
   }
 
   function _updateHeader() {
