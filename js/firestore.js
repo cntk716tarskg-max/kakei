@@ -1,94 +1,55 @@
 /* =====================================================
    firestore.js — Firebase Auth + Firestore 同期
-   ・USE_FIRESTORE = false の間は完全に無効
 
-   【読み取り戦略】
-   起動時 :
-     meta/info を1件取得しバージョン比較
-     初回(Firestoreが空) → ローカルデータを全送信
-     一致              → 以降の読み取り0件
-     不一致            → profile(1) + 表示月(1) を取得 → _syncNeeded=true
-
-   月切替時 :
-     _syncNeeded=false → 0件（バージョン一致で起動）
-     _syncNeeded=true  → 未取得の月のみ1件取得
-
-   【データ消失対策】
-   ・タブ切替・バックグラウンド遷移時にデバウンス中のデータを即送信
+   【設計方針】
+   Pull: ログイン時に必ずprofile + 表示月を取得（常に最新）
+         月切替時は未取得の月を都度取得（セッション内キャッシュ）
+   Push: カテゴリ変更 → 即送信
+         月データ    → 3秒デバウンス
+         入力候補    → 5秒デバウンス
+         バックグラウンド移行時 → 保留データを即フラッシュ
    ===================================================== */
 
 const FirestoreDB = (() => {
 
-  let _db           = null;
-  let _uid          = null;
-  let _ready        = false;
-  let _auth         = null;
-  let _mode         = 'signin';
-  let _cloudVersion = null;
-  let _syncNeeded   = false;
+  let _db   = null;
+  let _uid  = null;
+  let _ready = false;
+  let _auth  = null;
+  let _mode  = 'signin';
+
+  // セッション内で取得済みの月キー（同一セッションでの重複fetch防止）
   const _pulledMonths = new Set();
-
-  const VER_KEY = 'kakei_cloud_ver_v2';
-
-  /* ─────────────────────────────────────────────────────
-     バージョン管理
-  ───────────────────────────────────────────────────── */
-
-  function _localVer()      { return localStorage.getItem(VER_KEY) || '0'; }
-  function _saveLocalVer(v) { localStorage.setItem(VER_KEY, String(v)); }
-  function _clearLocalVer() { localStorage.removeItem(VER_KEY); }
-
-  /* ─────────────────────────────────────────────────────
-     月キー生成ヘルパー（直近 n ヶ月）
-  ───────────────────────────────────────────────────── */
-
-  function _recentMonthKeys(n) {
-    const keys = [];
-    const d = new Date();
-    for (let i = 0; i < n; i++) {
-      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-      d.setMonth(d.getMonth() - 1);
-    }
-    return keys;
-  }
 
   /* ─────────────────────────────────────────────────────
      デバウンスタイマー
   ───────────────────────────────────────────────────── */
 
-  const _monthTimers  = {}; // { "2026-04": timerId }
-  let   _profileTimer = null;
+  const _monthTimers = {};
+  let   _suggTimer   = null;
 
   /* ─────────────────────────────────────────────────────
-     バックグラウンド移行時のフラッシュ
-     タブ切替・アプリ最小化・別アプリ切替時に
-     デバウンス待機中のデータを即座に送信する
+     バックグラウンド移行時フラッシュ
   ───────────────────────────────────────────────────── */
 
   function _flushPending() {
     if (!_ready) return;
-
-    // 保留中の月データを全て即送信
     Object.keys(_monthTimers).forEach(key => {
       clearTimeout(_monthTimers[key]);
       delete _monthTimers[key];
       const [y, m] = key.split('-').map(Number);
       _doPushMonthData(y, m).catch(() => {});
     });
-
-    // 保留中のプロフィールを即送信
-    if (_profileTimer !== null) {
-      clearTimeout(_profileTimer);
-      _profileTimer = null;
-      _doPushProfile().catch(() => {});
+    if (_suggTimer !== null) {
+      clearTimeout(_suggTimer);
+      _suggTimer = null;
+      _doPushSuggestions().catch(() => {});
     }
   }
 
-  // タブ切替・バックグラウンド遷移を検知
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') _flushPending();
   });
-  // iOS Safari 向け（pagehide は visibilitychange より確実に発火）
   window.addEventListener('pagehide', _flushPending);
 
   /* ─────────────────────────────────────────────────────
@@ -102,7 +63,6 @@ const FirestoreDB = (() => {
       return Promise.resolve();
     }
     if (firebase.apps.length === 0) firebase.initializeApp(FIREBASE_CONFIG);
-
     _auth = firebase.auth();
     _bindAuthEnter();
 
@@ -110,11 +70,9 @@ const FirestoreDB = (() => {
       if (user) {
         _onLogin(user);
       } else {
-        _ready        = false;
-        _uid          = null;
-        _db           = null;
-        _cloudVersion = null;
-        _syncNeeded   = false;
+        _ready = false;
+        _uid   = null;
+        _db    = null;
         _pulledMonths.clear();
         document.getElementById('auth-logout-btn')?.classList.add('hidden');
         _showOverlay();
@@ -131,118 +89,40 @@ const FirestoreDB = (() => {
     _hideOverlay();
     document.getElementById('auth-logout-btn')?.classList.remove('hidden');
 
-    // ① バージョン確認（1 read）
-    let metaSnap;
-    try {
-      metaSnap = await _userRef().collection('meta').doc('info').get();
-    } catch (e) {
-      console.warn('[FirestoreDB] バージョン取得失敗:', e.message);
-      return;
+    // ログイン時は常にprofileと表示月を取得（常に最新を保証）
+    try { await _pullProfile(); }
+    catch (e) { console.warn('[FirestoreDB] profile取得失敗:', e.message); }
+
+    const s = typeof App !== 'undefined' ? App.getState() : null;
+    if (s) {
+      try { await _pullMonth(s.year, s.month); }
+      catch (e) { console.warn('[FirestoreDB] 月データ取得失敗:', e.message); }
     }
-    _cloudVersion = metaSnap.exists ? (metaSnap.data().version || 0) : 0;
-
-    // ② Firestoreにデータが存在しない → ローカルを初期送信
-    if (!metaSnap.exists || _cloudVersion === 0) {
-      console.log('[FirestoreDB] Firestoreが空 — ローカルデータを送信します');
-      await _pushInitialData();
-      _syncNeeded = false;
-      if (typeof App !== 'undefined') App.refresh();
-      return;
-    }
-
-    // ③ バージョン一致 → スキップ
-    if (String(_cloudVersion) === _localVer()) {
-      console.log('[FirestoreDB] バージョン一致 — pull スキップ (読み取り: 1件)');
-      _syncNeeded = false;
-      return;
-    }
-
-    // ④ バージョン不一致 → _syncNeeded=true、profile + 表示月を取得
-    console.log('[FirestoreDB] バージョン不一致 — 同期開始');
-    _syncNeeded = true;
-
-    try { await _pullProfile(); } catch (e) {
-      console.warn('[FirestoreDB] profile 取得失敗:', e.message);
-    }
-
-    const appState = typeof App !== 'undefined' ? App.getState() : null;
-    if (appState) {
-      try { await _pullMonth(appState.year, appState.month); } catch (e) {
-        console.warn('[FirestoreDB] 月データ取得失敗:', e.message);
-      }
-    }
-
-    // ローカルバージョン更新（次回ログイン時のスキップ判定用）
-    // ※ _syncNeeded は true のまま → 月切替のたびに未取得月を pull し続ける
-    _saveLocalVer(_cloudVersion);
 
     if (typeof App !== 'undefined') App.refresh();
-    console.log('[FirestoreDB] 初期同期完了');
-  }
-
-  /* ─────────────────────────────────────────────────────
-     初期送信：Firestore が空のとき、ローカルデータを全送信
-  ───────────────────────────────────────────────────── */
-
-  async function _pushInitialData() {
-    const local = Storage.loadAll();
-    const hasData = (local.categories && local.categories.length > 0)
-                 || Object.keys(local.months || {}).length > 0;
-
-    if (!hasData) {
-      // ローカルも空 → 何もしない
-      console.log('[FirestoreDB] ローカルデータなし — 送信スキップ');
-      return;
-    }
-
-    const ver   = Date.now();
-    const batch = _db.batch();
-
-    // プロフィール（カテゴリ・入力候補）
-    batch.set(_userRef().collection('data').doc('profile'), {
-      categories:  local.categories  || [],
-      suggestions: (local.suggestions || []).slice(0, 200)
-    });
-
-    // 直近13ヶ月分の月データ
-    const keys = _recentMonthKeys(13);
-    for (const key of keys) {
-      if (local.months[key]) {
-        batch.set(_userRef().collection('months').doc(key), local.months[key]);
-      }
-    }
-
-    // バージョン記録
-    batch.set(_userRef().collection('meta').doc('info'), { version: ver });
-
-    try {
-      await batch.commit();
-      _cloudVersion = ver;
-      _saveLocalVer(ver);
-      console.log('[FirestoreDB] 初期送信完了');
-    } catch (e) {
-      console.warn('[FirestoreDB] 初期送信失敗:', e.message);
-    }
+    console.log('[FirestoreDB] ログイン同期完了');
   }
 
   function isReady() { return _ready; }
 
   /* ─────────────────────────────────────────────────────
-     月切替時の呼び出し口
+     月切替時（未取得の月のみfetch）
   ───────────────────────────────────────────────────── */
 
   async function ensureMonth(year, month) {
-    if (!_ready || !_syncNeeded) return;
-
+    if (!_ready) return;
     const key = Storage.monthKey(year, month);
     if (_pulledMonths.has(key)) return;
-
-    await _pullMonth(year, month);
-    if (typeof App !== 'undefined') App.refresh();
+    try {
+      await _pullMonth(year, month);
+      if (typeof App !== 'undefined') App.refresh();
+    } catch (e) {
+      console.warn('[FirestoreDB] ensureMonth失敗:', e.message);
+    }
   }
 
   /* ─────────────────────────────────────────────────────
-     個別 pull
+     pull ヘルパー
   ───────────────────────────────────────────────────── */
 
   async function _pullProfile() {
@@ -257,7 +137,7 @@ const FirestoreDB = (() => {
 
   async function _pullMonth(year, month) {
     const key = Storage.monthKey(year, month);
-    _pulledMonths.add(key); // fetch前に追加して重複防止
+    _pulledMonths.add(key); // 先に追加して重複fetch防止
     try {
       const snap = await _userRef().collection('months').doc(key).get();
       if (snap.exists) {
@@ -266,7 +146,7 @@ const FirestoreDB = (() => {
         Storage.saveAll(local);
       }
     } catch (e) {
-      _pulledMonths.delete(key); // エラー時はリトライ可能にする
+      _pulledMonths.delete(key); // エラー時はリトライ可能に
       throw e;
     }
   }
@@ -282,7 +162,6 @@ const FirestoreDB = (() => {
   function _hideOverlay() {
     document.getElementById('auth-overlay')?.classList.add('hidden');
   }
-
   function _setMode(mode) {
     _mode = mode;
     document.querySelectorAll('.auth-tab').forEach(t =>
@@ -294,7 +173,6 @@ const FirestoreDB = (() => {
     _clearMsg();
   }
   function switchMode(mode) { _setMode(mode); }
-
   function _setError(msg) {
     const err = document.getElementById('auth-error');
     if (err) { err.textContent = msg; err.classList.remove('hidden'); }
@@ -310,7 +188,6 @@ const FirestoreDB = (() => {
       document.getElementById(id)?.classList.add('hidden')
     );
   }
-
   function _bindAuthEnter() {
     setTimeout(() => {
       const emailEl = document.getElementById('auth-email');
@@ -325,7 +202,7 @@ const FirestoreDB = (() => {
   }
 
   /* ─────────────────────────────────────────────────────
-     ログイン / 新規登録
+     ログイン / 新規登録 / リセット / ログアウト
   ───────────────────────────────────────────────────── */
 
   async function submitAuth() {
@@ -357,10 +234,7 @@ const FirestoreDB = (() => {
 
   async function signOut() {
     if (!_auth) return;
-    _flushPending(); // ログアウト前に未送信データをフラッシュ
-    _clearLocalVer();
-    _cloudVersion = null;
-    _syncNeeded   = false;
+    _flushPending();
     _pulledMonths.clear();
     await _auth.signOut();
   }
@@ -380,11 +254,47 @@ const FirestoreDB = (() => {
   }
 
   /* ─────────────────────────────────────────────────────
-     push 系（デバウンス + バッチ書き込み）
+     push 系
+
+     pushCategories : 即送信（区分追加・削除は即反映）
+     pushMonthData  : 3秒デバウンス
+     pushSuggestions: 5秒デバウンス（入力候補は頻繁に更新）
   ───────────────────────────────────────────────────── */
 
   function _userRef() { return _db.collection('users').doc(_uid); }
 
+  // カテゴリ変更 → 即送信
+  function pushCategories() {
+    if (!_ready) return;
+    clearTimeout(_suggTimer); // 入力候補の保留もまとめてキャンセル
+    _doPushProfile().catch(e => console.warn('[FirestoreDB] pushCategories失敗:', e.message));
+  }
+
+  // 入力候補更新 → 5秒デバウンス
+  function pushSuggestions() {
+    if (!_ready) return;
+    clearTimeout(_suggTimer);
+    _suggTimer = setTimeout(() => {
+      _suggTimer = null;
+      _doPushSuggestions().catch(() => {});
+    }, 5000);
+  }
+
+  async function _doPushProfile() {
+    await _userRef().collection('data').doc('profile').set({
+      categories:  Storage.getCategories(),
+      suggestions: Storage.getSuggestions()
+    });
+  }
+
+  async function _doPushSuggestions() {
+    await _userRef().collection('data').doc('profile').set({
+      categories:  Storage.getCategories(),
+      suggestions: Storage.getSuggestions()
+    });
+  }
+
+  // 月データ → 3秒デバウンス
   function pushMonthData(year, month) {
     if (!_ready) return;
     const key = Storage.monthKey(year, month);
@@ -398,35 +308,7 @@ const FirestoreDB = (() => {
   async function _doPushMonthData(year, month) {
     const key = Storage.monthKey(year, month);
     const md  = Storage.getMonthData(year, month);
-    const ver = Date.now();
-    const batch = _db.batch();
-    batch.set(_userRef().collection('months').doc(key), md);
-    batch.set(_userRef().collection('meta').doc('info'), { version: ver });
-    await batch.commit();
-    _cloudVersion = ver;
-    _saveLocalVer(ver);
-  }
-
-  function pushProfile() {
-    if (!_ready) return;
-    clearTimeout(_profileTimer);
-    _profileTimer = setTimeout(() => {
-      _profileTimer = null;
-      _doPushProfile().catch(() => {});
-    }, 3000);
-  }
-
-  async function _doPushProfile() {
-    const ver = Date.now();
-    const batch = _db.batch();
-    batch.set(_userRef().collection('data').doc('profile'), {
-      categories:  Storage.getCategories(),
-      suggestions: Storage.getSuggestions()
-    });
-    batch.set(_userRef().collection('meta').doc('info'), { version: ver });
-    await batch.commit();
-    _cloudVersion = ver;
-    _saveLocalVer(ver);
+    await _userRef().collection('months').doc(key).set(md);
   }
 
   /* ===== 公開 ===== */
@@ -434,6 +316,6 @@ const FirestoreDB = (() => {
     init, isReady,
     ensureMonth,
     submitAuth, resetPassword, switchMode, signOut,
-    pushMonthData, pushProfile
+    pushCategories, pushSuggestions, pushMonthData
   };
 })();

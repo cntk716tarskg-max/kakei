@@ -74,7 +74,7 @@ const Storage = (() => {
     data.categories = cats;
     saveAll(data);
     if (typeof FirestoreDB !== 'undefined' && FirestoreDB.isReady()) {
-      FirestoreDB.pushProfile();
+      FirestoreDB.pushCategories(); // 即送信（区分変更はデバウンスなし）
     }
   }
 
@@ -93,7 +93,7 @@ const Storage = (() => {
     if (data.suggestions.length > 300) data.suggestions = data.suggestions.slice(0, 300);
     saveAll(data);
     if (typeof FirestoreDB !== 'undefined' && FirestoreDB.isReady()) {
-      FirestoreDB.pushProfile();
+      FirestoreDB.pushSuggestions(); // デバウンス（入力候補は頻繁に更新）
     }
   }
 
