@@ -55,7 +55,7 @@ const Storage = (() => {
       income:     [],
       budgets:    prev && prev.budgets ? Object.assign({}, prev.budgets) : {},
       fixedCosts: prev && Array.isArray(prev.fixedCosts)
-                    ? prev.fixedCosts.map(f => Object.assign({}, f))
+                    ? prev.fixedCosts.map(f => Object.assign({}, f, { amount: 0 }))
                     : [],
       entries:    []
     };
