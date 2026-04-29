@@ -117,10 +117,18 @@ const Detail = (() => {
     // 区分: Enter → 保存、← → 金額へ、数字 → バッファ選択（10〜12対応）
     catEl.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
-        e.preventDefault(); _catBuffer = ''; _saveEntry(); return;
+        e.preventDefault();
+        _catBuffer = '';
+        catEl.classList.remove('cat-num-active');
+        _saveEntry();
+        return;
       }
       if (e.key === 'ArrowLeft') {
-        e.preventDefault(); _catBuffer = ''; amtEl.focus(); amtEl.select(); return;
+        e.preventDefault();
+        _catBuffer = '';
+        catEl.classList.remove('cat-num-active');
+        amtEl.focus(); amtEl.select();
+        return;
       }
       if (/^[0-9]$/.test(e.key)) {
         e.preventDefault();
@@ -130,20 +138,26 @@ const Detail = (() => {
         if (tentative.length <= 2 && num >= 1 && num <= cs.length) {
           _catBuffer = tentative;
           catEl.value = cs[num - 1].id;
+          catEl.classList.add('cat-num-active');
         } else {
           // バッファをリセットして今押した1桁を新たな入力とする
           const singleNum = parseInt(e.key);
           if (singleNum >= 1 && singleNum <= cs.length) {
             _catBuffer = e.key;
             catEl.value = cs[singleNum - 1].id;
+            catEl.classList.add('cat-num-active');
           } else {
             _catBuffer = '';
+            catEl.classList.remove('cat-num-active');
           }
         }
       }
     });
 
-    catEl.addEventListener('blur', () => { _catBuffer = ''; });
+    catEl.addEventListener('blur', () => {
+      _catBuffer = '';
+      catEl.classList.remove('cat-num-active');
+    });
 
     addBtn.addEventListener('click', _saveEntry);
 
@@ -251,6 +265,19 @@ const Detail = (() => {
     el.innerHTML = html;
   }
 
+  /* ===== 月選択オプション生成（基準月の前後6ヶ月） ===== */
+  function _monthOptions(baseYear, baseMonth) {
+    const opts = [];
+    for (let i = -6; i <= 6; i++) {
+      let y = baseYear, m = baseMonth + i;
+      while (m < 1)  { m += 12; y--; }
+      while (m > 12) { m -= 12; y++; }
+      const sel = (i === 0) ? 'selected' : '';
+      opts.push(`<option value="${y}-${m}" ${sel}>${y}年${m}月</option>`);
+    }
+    return opts.join('');
+  }
+
   /* ===== 明細編集モーダル ===== */
   function openEditEntry(id) {
     const md      = Storage.getMonthData(_year, _month);
@@ -261,8 +288,14 @@ const Detail = (() => {
       `<option value="${escHtml(c.id)}" ${c.id === entry.categoryId ? 'selected' : ''}>${i + 1}. ${escHtml(c.name)}</option>`
     ).join('');
 
-    Modal.open(`${_year}年${_month}月　明細を編集`, `
+    Modal.open('明細を編集', `
       <div class="edit-form-grid">
+        <div class="form-group">
+          <label class="form-label">月</label>
+          <select id="edit-month" class="form-input">
+            ${_monthOptions(_year, _month)}
+          </select>
+        </div>
         <div class="form-group">
           <label class="form-label">日</label>
           <input id="edit-day" class="form-input" type="number" min="1" max="31"
@@ -297,15 +330,29 @@ const Detail = (() => {
     const item   = document.getElementById('edit-item').value.trim();
     const amount = parseInt(document.getElementById('edit-amount').value);
     const catId  = document.getElementById('edit-cat').value;
+    const [newYear, newMonth] = document.getElementById('edit-month').value.split('-').map(Number);
 
     if (!day || !item || !amount || !catId) return;
 
-    const md    = Storage.getMonthData(_year, _month);
-    const idx   = md.entries.findIndex(e => e.id === id);
+    const md  = Storage.getMonthData(_year, _month);
+    const idx = md.entries.findIndex(e => e.id === id);
     if (idx === -1) { Modal.close(); return; }
 
-    md.entries[idx] = { ...md.entries[idx], day, item, amount, categoryId: catId };
-    Storage.saveMonthData(_year, _month, md);
+    const entry = { ...md.entries[idx], day, item, amount, categoryId: catId };
+
+    if (newYear === _year && newMonth === _month) {
+      // 同月: その場で更新
+      md.entries[idx] = entry;
+      Storage.saveMonthData(_year, _month, md);
+    } else {
+      // 月が変わった: 旧月から削除 → 新月に追加
+      md.entries.splice(idx, 1);
+      Storage.saveMonthData(_year, _month, md);
+      const newMd = Storage.getMonthData(newYear, newMonth);
+      newMd.entries.push(entry);
+      Storage.saveMonthData(newYear, newMonth, newMd);
+    }
+
     Storage.recordSuggestion(item);
     Modal.close();
     _renderList();

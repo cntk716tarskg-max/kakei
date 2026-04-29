@@ -9,7 +9,7 @@
 
 .detail-form {
   display: grid;
-  grid-template-columns: 60px 1fr 90px;
+  grid-template-columns: 60px 2fr 3fr;
   gap: 8px;
   align-items: end;
 }
@@ -134,6 +134,15 @@
   flex: 1;
   height: 1px;
   background: var(--clr-border);
+}
+
+/* ===== 区分フィールド 数字入力中ハイライト ===== */
+select.form-input.cat-num-active {
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 0 3px rgba(244,169,108,.3);
+  background-color: var(--clr-primary-light);
+  color: var(--clr-primary-dark);
+  font-weight: 700;
 }
 
 /* ===== 編集モーダル内フォーム ===== */
