@@ -11,10 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-deploy-to-firebase-hosting@v0
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KAKEI_AD3F5 }}'
-          projectId: kakei-ad3f5
-          channelId: live
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KAKEI_AD3F5 }}'
+
+      - name: Deploy to Firebase Hosting
+        run: npx firebase-tools@latest deploy --only hosting --project kakei-ad3f5 --non-interactive
