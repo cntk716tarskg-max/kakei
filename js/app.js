@@ -62,6 +62,18 @@ const App = (() => {
   function _updateHeader() {
     document.getElementById('header-month-label').textContent =
       state.year + '年' + state.month + '月';
+    const now = new Date();
+    const isCurrentMonth = state.year  === now.getFullYear()
+                        && state.month === now.getMonth() + 1;
+    const todayBtn = document.getElementById('btn-today-month');
+    if (todayBtn) todayBtn.classList.toggle('hidden', isCurrentMonth);
+  }
+
+  function goToCurrentMonth() {
+    const now = new Date();
+    state.year  = now.getFullYear();
+    state.month = now.getMonth() + 1;
+    _refresh();
   }
 
   function _renderPage() {
@@ -79,5 +91,5 @@ const App = (() => {
   /* ----- DOMContentLoaded で起動 ----- */
   document.addEventListener('DOMContentLoaded', init);
 
-  return { getState, navigateTo, refresh };
+  return { getState, navigateTo, refresh, goToCurrentMonth };
 })();
