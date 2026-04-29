@@ -1,6 +1,8 @@
 /* =====================================================
    firestore.js — Firebase Auth（メール/パスワード）+ Firestore 同期
    ・USE_FIRESTORE = false の間は完全に無効
+   ・読み込みはログイン時1回のみ、30分キャッシュあり
+   ・書き込みはデバウンスでまとめて送信
    ===================================================== */
 
 const FirestoreDB = (() => {
@@ -10,6 +12,37 @@ const FirestoreDB = (() => {
   let _ready = false;
   let _auth  = null;
   let _mode  = 'signin'; // 'signin' | 'signup'
+
+  /* ─────────────────────────────────────────────────────
+     キャッシュ設定
+     ・SYNC_INTERVAL : この時間内に再ログインしても pull をスキップ
+     ・SYNC_MONTHS   : pull する月数（当月 + 過去N-1ヶ月）
+  ───────────────────────────────────────────────────── */
+  const SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30分
+  const SYNC_MONTHS      = 13;              // 当月 + 12ヶ月前まで
+  const CACHE_TS_KEY     = 'kakei_last_sync';
+
+  function _getLastSync()  { return parseInt(localStorage.getItem(CACHE_TS_KEY) || '0'); }
+  function _setLastSync()  { localStorage.setItem(CACHE_TS_KEY, Date.now().toString()); }
+  function _clearLastSync(){ localStorage.removeItem(CACHE_TS_KEY); }
+  function _needsSync()    { return Date.now() - _getLastSync() > SYNC_INTERVAL_MS; }
+
+  // 直近 N ヶ月のキー配列を生成（例: ["2026-04","2026-03",...]）
+  function _recentMonthKeys(n) {
+    const keys = [];
+    const d = new Date();
+    for (let i = 0; i < n; i++) {
+      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      d.setMonth(d.getMonth() - 1);
+    }
+    return keys;
+  }
+
+  /* ─────────────────────────────────────────────────────
+     デバウンスタイマー
+  ───────────────────────────────────────────────────── */
+  const _monthTimers  = {}; // { "2026-04": timerId }
+  let   _profileTimer = null;
 
   /* ─────────────────────────────────────────────────────
      初期化
@@ -27,7 +60,6 @@ const FirestoreDB = (() => {
     _auth = firebase.auth();
     _bindAuthEnter();
 
-    // ログイン状態を監視（変化のたびに呼ばれる）
     _auth.onAuthStateChanged(user => {
       if (user) {
         _onLogin(user);
@@ -35,8 +67,7 @@ const FirestoreDB = (() => {
         _ready = false;
         _uid   = null;
         _db    = null;
-        const logoutBtn = document.getElementById('auth-logout-btn');
-        if (logoutBtn) logoutBtn.classList.add('hidden');
+        document.getElementById('auth-logout-btn')?.classList.add('hidden');
         _showOverlay();
       }
     });
@@ -49,9 +80,13 @@ const FirestoreDB = (() => {
     _db    = firebase.firestore();
     _ready = true;
     _hideOverlay();
-    const logoutBtn = document.getElementById('auth-logout-btn');
-    if (logoutBtn) logoutBtn.classList.remove('hidden');
-    await pullAll();
+    document.getElementById('auth-logout-btn')?.classList.remove('hidden');
+
+    if (_needsSync()) {
+      await pullAll();
+    } else {
+      console.log('[FirestoreDB] キャッシュ有効 — pull スキップ');
+    }
   }
 
   function isReady() { return _ready; }
@@ -61,14 +96,12 @@ const FirestoreDB = (() => {
   ───────────────────────────────────────────────────── */
 
   function _showOverlay() {
-    const el = document.getElementById('auth-overlay');
-    if (el) el.classList.remove('hidden');
+    document.getElementById('auth-overlay')?.classList.remove('hidden');
     _setMode('signin');
   }
 
   function _hideOverlay() {
-    const el = document.getElementById('auth-overlay');
-    if (el) el.classList.add('hidden');
+    document.getElementById('auth-overlay')?.classList.add('hidden');
   }
 
   /* ─────────────────────────────────────────────────────
@@ -82,8 +115,7 @@ const FirestoreDB = (() => {
     );
     const submitBtn = document.getElementById('auth-submit-btn');
     if (submitBtn) submitBtn.textContent = mode === 'signin' ? 'ログイン' : '新規登録';
-    const resetBtn = document.getElementById('auth-reset-btn');
-    if (resetBtn) resetBtn.classList.toggle('hidden', mode !== 'signin');
+    document.getElementById('auth-reset-btn')?.classList.toggle('hidden', mode !== 'signin');
     _clearMsg();
   }
 
@@ -93,21 +125,20 @@ const FirestoreDB = (() => {
     const err = document.getElementById('auth-error');
     const suc = document.getElementById('auth-success');
     if (err) { err.textContent = msg; err.classList.remove('hidden'); }
-    if (suc) suc.classList.add('hidden');
+    suc?.classList.add('hidden');
   }
 
   function _setSuccess(msg) {
-    const err = document.getElementById('auth-error');
     const suc = document.getElementById('auth-success');
+    const err = document.getElementById('auth-error');
     if (suc) { suc.textContent = msg; suc.classList.remove('hidden'); }
-    if (err) err.classList.add('hidden');
+    err?.classList.add('hidden');
   }
 
   function _clearMsg() {
-    ['auth-error', 'auth-success'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.classList.add('hidden');
-    });
+    ['auth-error', 'auth-success'].forEach(id =>
+      document.getElementById(id)?.classList.add('hidden')
+    );
   }
 
   /* ─────────────────────────────────────────────────────
@@ -145,7 +176,6 @@ const FirestoreDB = (() => {
       } else {
         await _auth.createUserWithEmailAndPassword(email, pass);
       }
-      // 成功 → onAuthStateChanged が _onLogin を呼ぶ
     } catch (e) {
       _setError(_errMsg(e.code));
       if (btn) btn.disabled = false;
@@ -168,11 +198,12 @@ const FirestoreDB = (() => {
   }
 
   /* ─────────────────────────────────────────────────────
-     ログアウト
+     ログアウト（キャッシュもクリア）
   ───────────────────────────────────────────────────── */
 
   async function signOut() {
     if (!_auth) return;
+    _clearLastSync();
     await _auth.signOut();
   }
 
@@ -195,15 +226,24 @@ const FirestoreDB = (() => {
   }
 
   /* ─────────────────────────────────────────────────────
-     push 系：LocalStorage → Firestore（fire-and-forget）
+     push 系：LocalStorage → Firestore（デバウンスあり）
+
+     ・pushMonthData : 3秒間隔でまとめて書き込み（月単位）
+     ・pushProfile   : 5秒間隔でまとめて書き込み
   ───────────────────────────────────────────────────── */
 
   function _userRef() {
     return _db.collection('users').doc(_uid);
   }
 
-  async function pushMonthData(year, month) {
+  function pushMonthData(year, month) {
     if (!_ready) return;
+    const key = Storage.monthKey(year, month);
+    clearTimeout(_monthTimers[key]);
+    _monthTimers[key] = setTimeout(() => _doPushMonthData(year, month), 3000);
+  }
+
+  async function _doPushMonthData(year, month) {
     const key = Storage.monthKey(year, month);
     const md  = Storage.getMonthData(year, month);
     try {
@@ -213,8 +253,13 @@ const FirestoreDB = (() => {
     }
   }
 
-  async function pushProfile() {
+  function pushProfile() {
     if (!_ready) return;
+    clearTimeout(_profileTimer);
+    _profileTimer = setTimeout(_doPushProfile, 5000);
+  }
+
+  async function _doPushProfile() {
     try {
       await _userRef().collection('data').doc('profile').set({
         categories:  Storage.getCategories(),
@@ -226,33 +271,41 @@ const FirestoreDB = (() => {
   }
 
   /* ─────────────────────────────────────────────────────
-     pull 系：Firestore → LocalStorage（ログイン直後のみ）
+     pull 系：Firestore → LocalStorage
+
+     ・ログイン時に1回だけ実行（30分キャッシュで制御）
+     ・取得するのは直近 SYNC_MONTHS ヶ月 + profile のみ
+     ・読み込み数 = SYNC_MONTHS(13) + 1(profile) = 最大14件/回
   ───────────────────────────────────────────────────── */
 
   async function pullAll() {
     if (!_ready) return;
     try {
+      const local = Storage.loadAll();
       let changed = false;
 
+      // プロフィール（カテゴリ・入力候補）— 1 read
       const profSnap = await _userRef().collection('data').doc('profile').get();
       if (profSnap.exists) {
-        const prof  = profSnap.data();
-        const local = Storage.loadAll();
+        const prof = profSnap.data();
         if (prof.categories)  { local.categories  = prof.categories;  changed = true; }
         if (prof.suggestions) { local.suggestions = prof.suggestions; changed = true; }
-        if (changed) Storage.saveAll(local);
       }
 
-      const monthsSnap = await _userRef().collection('months').get();
-      if (!monthsSnap.empty) {
-        const local = Storage.loadAll();
-        monthsSnap.forEach(doc => { local.months[doc.id] = doc.data(); });
-        Storage.saveAll(local);
-        changed = true;
-      }
+      // 月データ — 最大 SYNC_MONTHS reads（並列取得）
+      const keys   = _recentMonthKeys(SYNC_MONTHS);
+      const snaps  = await Promise.all(
+        keys.map(k => _userRef().collection('months').doc(k).get())
+      );
+      snaps.forEach(snap => {
+        if (snap.exists) { local.months[snap.id] = snap.data(); changed = true; }
+      });
 
-      if (changed && typeof App !== 'undefined') App.refresh();
-      console.log('[FirestoreDB] pullAll 完了');
+      if (changed) Storage.saveAll(local);
+      _setLastSync();
+
+      if (typeof App !== 'undefined') App.refresh();
+      console.log(`[FirestoreDB] pullAll 完了（${snaps.filter(s => s.exists).length + (profSnap.exists ? 1 : 0)} 件読み込み）`);
     } catch (e) {
       console.warn('[FirestoreDB] pullAll 失敗:', e.message);
     }
