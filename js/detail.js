@@ -5,7 +5,8 @@
 const Detail = (() => {
 
   let _year, _month;
-  let _lastDay = null;  // 最後に入力した日を記憶して連続入力を助ける
+  let _lastDay = null;   // 最後に入力した日を記憶して連続入力を助ける
+  let _catBuffer = '';   // 区分の数字入力バッファ
 
   /* ===== メインレンダリング ===== */
   function render(year, month) {
@@ -23,8 +24,8 @@ const Detail = (() => {
       ? today.getDate()
       : (_lastDay || 1);
 
-    const catOptions = cats.map(c =>
-      `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`
+    const catOptions = cats.map((c, i) =>
+      `<option value="${escHtml(c.id)}">${i + 1}. ${escHtml(c.name)}</option>`
     ).join('');
 
     document.getElementById('detail-input-section').innerHTML = `
@@ -70,7 +71,7 @@ const Detail = (() => {
 
         <p class="form-hint">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-          日→項目→金額→区分の順にEnterで進みます
+          Enter/→で次へ、←で前へ。区分は番号を入力しEnterで確定
         </p>
       </div>
     `;
@@ -80,25 +81,69 @@ const Detail = (() => {
 
   /* ===== フォームイベント ===== */
   function _bindFormEvents() {
-    const dayEl    = document.getElementById('inp-day');
-    const itemEl   = document.getElementById('inp-item');
-    const amtEl    = document.getElementById('inp-amount');
-    const catEl    = document.getElementById('inp-cat');
-    const addBtn   = document.getElementById('btn-add-entry');
+    const dayEl  = document.getElementById('inp-day');
+    const itemEl = document.getElementById('inp-item');
+    const amtEl  = document.getElementById('inp-amount');
+    const catEl  = document.getElementById('inp-cat');
+    const addBtn = document.getElementById('btn-add-entry');
 
-    // Enter キーフロー
+    // 日: Enter/→ → 項目へ
     dayEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); itemEl.focus(); itemEl.select(); }
+      if (e.key === 'Enter' || e.key === 'ArrowRight') {
+        e.preventDefault(); itemEl.focus(); itemEl.select();
+      }
     });
+
+    // 項目: Enter/→(末尾) → 金額へ、←(先頭) → 日へ
     itemEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); _hideAC(); amtEl.focus(); amtEl.select(); }
+      if (e.key === 'Enter') {
+        e.preventDefault(); _hideAC(); amtEl.focus(); amtEl.select();
+      } else if (e.key === 'ArrowLeft' && itemEl.selectionStart === 0 && itemEl.selectionEnd === 0) {
+        e.preventDefault(); dayEl.focus(); dayEl.select();
+      } else if (e.key === 'ArrowRight' && itemEl.selectionStart === itemEl.value.length) {
+        e.preventDefault(); _hideAC(); amtEl.focus(); amtEl.select();
+      }
     });
+
+    // 金額: Enter/→ → 区分へ、← → 項目へ
     amtEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); catEl.focus(); }
+      if (e.key === 'Enter' || e.key === 'ArrowRight') {
+        e.preventDefault(); _catBuffer = ''; catEl.focus();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault(); itemEl.focus(); itemEl.select();
+      }
     });
+
+    // 区分: Enter → 保存、← → 金額へ、数字 → バッファ選択（10〜12対応）
     catEl.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); _saveEntry(); }
+      if (e.key === 'Enter') {
+        e.preventDefault(); _catBuffer = ''; _saveEntry(); return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault(); _catBuffer = ''; amtEl.focus(); amtEl.select(); return;
+      }
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        const cs = Storage.getCategories();
+        const tentative = _catBuffer + e.key;
+        const num = parseInt(tentative);
+        if (tentative.length <= 2 && num >= 1 && num <= cs.length) {
+          _catBuffer = tentative;
+          catEl.value = cs[num - 1].id;
+        } else {
+          // バッファをリセットして今押した1桁を新たな入力とする
+          const singleNum = parseInt(e.key);
+          if (singleNum >= 1 && singleNum <= cs.length) {
+            _catBuffer = e.key;
+            catEl.value = cs[singleNum - 1].id;
+          } else {
+            _catBuffer = '';
+          }
+        }
+      }
     });
+
+    catEl.addEventListener('blur', () => { _catBuffer = ''; });
 
     addBtn.addEventListener('click', _saveEntry);
 
@@ -212,11 +257,11 @@ const Detail = (() => {
     const entry   = md.entries.find(e => e.id === id);
     if (!entry) return;
     const cats    = Storage.getCategories();
-    const catOpts = cats.map(c =>
-      `<option value="${escHtml(c.id)}" ${c.id === entry.categoryId ? 'selected' : ''}>${escHtml(c.name)}</option>`
+    const catOpts = cats.map((c, i) =>
+      `<option value="${escHtml(c.id)}" ${c.id === entry.categoryId ? 'selected' : ''}>${i + 1}. ${escHtml(c.name)}</option>`
     ).join('');
 
-    Modal.open('明細を編集', `
+    Modal.open(`${_year}年${_month}月　明細を編集`, `
       <div class="edit-form-grid">
         <div class="form-group">
           <label class="form-label">日</label>
