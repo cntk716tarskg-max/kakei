@@ -3,39 +3,41 @@
    ・USE_FIRESTORE = false の間は完全に無効
 
    【読み取り戦略】
-   ・起動時 : meta/info を1件取得してバージョン比較
-              一致 → 以降の読み取り0件
-              不一致 → profile(1件) + 表示月(1件) を取得
-   ・月切替時: バージョン不一致かつ未取得の月のみ1件取得
-              バージョン一致なら0件
+   起動時 :
+     meta/info を1件取得しバージョン比較
+     一致   → 以降の読み取り0件（ローカルは最新）
+     不一致 → profile(1) + 表示月(1) を取得 → _syncNeeded=true
 
-   【書き込み戦略】
-   ・デバウンス (月データ3秒 / profile5秒)
-   ・バッチ書き込みでデータと meta/info.version を同時更新
+   月切替時 :
+     _syncNeeded=false → 0件（バージョン一致で起動）
+     _syncNeeded=true  → 未取得の月のみ1件取得
+
+   書き込み時 :
+     デバウンス後、データ + meta/info.version をバッチ書き込み
+     → ローカルバージョンも更新し次回起動でスキップ対象に
    ===================================================== */
 
 const FirestoreDB = (() => {
 
-  let _db           = null;
-  let _uid          = null;
-  let _ready        = false;
-  let _auth         = null;
-  let _mode         = 'signin';
-  let _cloudVersion = null;        // ログイン時に取得したクラウド版数
-  const _pulledMonths = new Set(); // このセッションで取得済みの月キー
+  let _db          = null;
+  let _uid         = null;
+  let _ready       = false;
+  let _auth        = null;
+  let _mode        = 'signin';
+  let _cloudVersion = null;
+  let _syncNeeded  = false;        // バージョン不一致でログインした場合 true
+  const _pulledMonths = new Set(); // このセッションで取得済み（重複防止用）
 
-  const VER_KEY = 'kakei_cloud_ver'; // localStorage に保存するバージョン
+  // VER_KEY を _v2 に変更することで既存ユーザーも初回に確実に同期される
+  const VER_KEY = 'kakei_cloud_ver_v2';
 
   /* ─────────────────────────────────────────────────────
      バージョン管理ヘルパー
   ───────────────────────────────────────────────────── */
 
-  function _localVer()       { return localStorage.getItem(VER_KEY) || '0'; }
-  function _saveLocalVer(v)  { localStorage.setItem(VER_KEY, String(v)); }
-  function _clearLocalVer()  { localStorage.removeItem(VER_KEY); }
-
-  // ローカルとクラウドのバージョンが一致しているか
-  function _versionSynced()  { return _cloudVersion !== null && String(_cloudVersion) === _localVer(); }
+  function _localVer()      { return localStorage.getItem(VER_KEY) || '0'; }
+  function _saveLocalVer(v) { localStorage.setItem(VER_KEY, String(v)); }
+  function _clearLocalVer() { localStorage.removeItem(VER_KEY); }
 
   /* ─────────────────────────────────────────────────────
      デバウンスタイマー
@@ -67,6 +69,7 @@ const FirestoreDB = (() => {
         _uid          = null;
         _db           = null;
         _cloudVersion = null;
+        _syncNeeded   = false;
         _pulledMonths.clear();
         document.getElementById('auth-logout-btn')?.classList.add('hidden');
         _showOverlay();
@@ -84,47 +87,66 @@ const FirestoreDB = (() => {
     document.getElementById('auth-logout-btn')?.classList.remove('hidden');
 
     // ① バージョン確認（1 read）
-    const metaSnap = await _userRef().collection('meta').doc('info').get();
-    _cloudVersion  = metaSnap.exists ? (metaSnap.data().version || 0) : 0;
-
-    if (_versionSynced()) {
-      console.log('[FirestoreDB] バージョン一致 — pull スキップ (読み取り: 1件)');
+    try {
+      const metaSnap = await _userRef().collection('meta').doc('info').get();
+      _cloudVersion  = metaSnap.exists ? (metaSnap.data().version || 0) : 0;
+    } catch (e) {
+      console.warn('[FirestoreDB] バージョン取得失敗:', e.message);
       return;
     }
 
-    // ② バージョン不一致 → profile + 表示中の月を取得（最大2 reads）
-    console.log('[FirestoreDB] バージョン不一致 — データ取得開始');
-    await _pullProfile();
+    if (String(_cloudVersion) === _localVer()) {
+      console.log('[FirestoreDB] バージョン一致 — pull スキップ (読み取り: 1件)');
+      _syncNeeded = false;
+      return;
+    }
+
+    // ② バージョン不一致 → _syncNeeded=true でセッション中の月切替でも取得を続ける
+    console.log('[FirestoreDB] バージョン不一致 — 同期開始');
+    _syncNeeded = true;
+
+    // profile + 表示中の月を取得（最大2 reads）
+    try {
+      await _pullProfile();
+    } catch (e) {
+      console.warn('[FirestoreDB] profile 取得失敗:', e.message);
+    }
 
     const appState = typeof App !== 'undefined' ? App.getState() : null;
-    if (appState) await _pullMonth(appState.year, appState.month);
+    if (appState) {
+      await _pullMonth(appState.year, appState.month);
+    }
 
+    // ローカルバージョンを更新（次回ログイン時のスキップ判定用）
+    // ※ _syncNeeded は true のまま → 月切替のたびに未取得月を pull し続ける
     _saveLocalVer(_cloudVersion);
+
     if (typeof App !== 'undefined') App.refresh();
-    console.log('[FirestoreDB] 同期完了 (読み取り: 最大3件)');
+    console.log('[FirestoreDB] 初期同期完了 (読み取り: 最大3件)');
   }
 
   function isReady() { return _ready; }
 
   /* ─────────────────────────────────────────────────────
-     月切替時の呼び出し口
-     ・バージョン一致 → 0 reads
-     ・不一致かつ未取得 → 1 read
+     月切替時の呼び出し口（app.js の _refresh から呼ばれる）
+
+     _syncNeeded=false → 0 reads（バージョン一致で起動済み）
+     _syncNeeded=true  → 未取得月のみ 1 read
+     _pulledMonths に追加してから fetch → 並列呼び出しでの重複防止
   ───────────────────────────────────────────────────── */
 
   async function ensureMonth(year, month) {
-    if (!_ready) return;
-    if (_versionSynced()) return; // ローカルは最新
+    if (!_ready || !_syncNeeded) return;
 
     const key = Storage.monthKey(year, month);
-    if (_pulledMonths.has(key)) return; // このセッションで取得済み
+    if (_pulledMonths.has(key)) return; // 取得済み or 取得中
 
     await _pullMonth(year, month);
     if (typeof App !== 'undefined') App.refresh();
   }
 
   /* ─────────────────────────────────────────────────────
-     個別 pull ヘルパー（直接呼ばない）
+     個別 pull（直接呼ばない）
   ───────────────────────────────────────────────────── */
 
   async function _pullProfile() {
@@ -138,14 +160,19 @@ const FirestoreDB = (() => {
   }
 
   async function _pullMonth(year, month) {
-    const key  = Storage.monthKey(year, month);
-    const snap = await _userRef().collection('months').doc(key).get();
-    if (snap.exists) {
-      const local = Storage.loadAll();
-      local.months[key] = snap.data();
-      Storage.saveAll(local);
+    const key = Storage.monthKey(year, month);
+    _pulledMonths.add(key); // fetch 前に追加して重複 fetch を防ぐ
+    try {
+      const snap = await _userRef().collection('months').doc(key).get();
+      if (snap.exists) {
+        const local = Storage.loadAll();
+        local.months[key] = snap.data();
+        Storage.saveAll(local);
+      }
+    } catch (e) {
+      _pulledMonths.delete(key); // エラー時はリトライ可能にする
+      throw e;
     }
-    _pulledMonths.add(key);
   }
 
   /* ─────────────────────────────────────────────────────
@@ -259,6 +286,7 @@ const FirestoreDB = (() => {
     if (!_auth) return;
     _clearLocalVer();
     _cloudVersion = null;
+    _syncNeeded   = false;
     _pulledMonths.clear();
     await _auth.signOut();
   }
@@ -284,10 +312,9 @@ const FirestoreDB = (() => {
   /* ─────────────────────────────────────────────────────
      push 系：LocalStorage → Firestore
 
-     ・月データ / profile ともにデバウンス
-     ・バッチ書き込み: データ + meta/info.version を同時更新
-       → バージョンを書き込みのたびに同期し、次回起動時の
-         差分検出を正確に保つ
+     バッチ書き込み: データ + meta/info.version を同時更新
+     → ローカルバージョンも更新するため、次回起動時は
+       バージョン一致でスキップ対象になる
   ───────────────────────────────────────────────────── */
 
   function _userRef() {
