@@ -435,17 +435,25 @@ select.form-input {
 .modal-btns .btn-save:active { background: var(--clr-primary-dark); }
 .modal-btns .btn-cancel:active { background: var(--clr-bg); }
 
+/* ===== ヘッダー 月表示行 ===== */
+.hdr-month-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
 /* ===== ヘッダー「今月」ボタン ===== */
 .btn-hdr-today {
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 10px;
+  padding: 2px 8px;
   border-radius: var(--radius-full);
   background: rgba(255,255,255,.25);
   color: var(--clr-white);
-  margin-top: 2px;
   letter-spacing: .3px;
   transition: background .15s;
+  white-space: nowrap;
 }
 .btn-hdr-today:active { background: rgba(255,255,255,.4); }
 

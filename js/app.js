@@ -66,11 +66,6 @@ const App = (() => {
   function _updateHeader() {
     document.getElementById('header-month-label').textContent =
       state.year + '年' + state.month + '月';
-    const now = new Date();
-    const isCurrentMonth = state.year  === now.getFullYear()
-                        && state.month === now.getMonth() + 1;
-    const todayBtn = document.getElementById('btn-today-month');
-    if (todayBtn) todayBtn.classList.toggle('hidden', isCurrentMonth);
   }
 
   function goToCurrentMonth() {
