@@ -9,7 +9,7 @@
 
 .detail-form {
   display: grid;
-  grid-template-columns: 60px 2fr 3fr;
+  grid-template-columns: 60px 3fr 2fr;
   gap: 8px;
   align-items: end;
 }
@@ -52,6 +52,33 @@
   gap: 4px;
 }
 .form-hint svg { width: 13px; height: 13px; }
+
+/* ===== 並び替えバー ===== */
+.detail-sort-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.detail-sort-btn {
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--clr-text-sub);
+  border: 1.5px solid var(--clr-border);
+  background: var(--clr-white);
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.detail-sort-btn.active {
+  background: var(--clr-primary-light);
+  color: var(--clr-primary-dark);
+  border-color: var(--clr-primary);
+}
+
+.detail-sort-btn:active { opacity: .75; }
 
 /* ===== 明細一覧 ===== */
 .detail-list-header {

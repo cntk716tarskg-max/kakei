@@ -7,6 +7,7 @@ const Detail = (() => {
   let _year, _month;
   let _lastDay = null;   // 最後に入力した日を記憶して連続入力を助ける
   let _catBuffer = '';   // 区分の数字入力バッファ
+  let _sortMode = 'date'; // 並び替えモード: 'date' | 'item' | 'cat'
 
   /* ===== メインレンダリング ===== */
   function render(year, month) {
@@ -210,15 +211,28 @@ const Detail = (() => {
     dayEl.select();
   }
 
+  /* ===== 並び替えモード変更 ===== */
+  function _setSort(mode) {
+    _sortMode = mode;
+    _renderList();
+  }
+
   /* ===== 明細一覧 ===== */
   function _renderList() {
-    const md      = Storage.getMonthData(_year, _month);
-    const cats    = Storage.getCategories();
-    const catMap  = Object.fromEntries(cats.map(c => [c.id, c.name]));
-    const el      = document.getElementById('detail-list-section');
+    const md     = Storage.getMonthData(_year, _month);
+    const cats   = Storage.getCategories();
+    const catMap = Object.fromEntries(cats.map(c => [c.id, c.name]));
+    const el     = document.getElementById('detail-list-section');
+
+    const sortBar = `
+      <div class="detail-sort-bar">
+        <button class="detail-sort-btn${_sortMode === 'date' ? ' active' : ''}" onclick="Detail._setSort('date')">日付順</button>
+        <button class="detail-sort-btn${_sortMode === 'item' ? ' active' : ''}" onclick="Detail._setSort('item')">項目順</button>
+        <button class="detail-sort-btn${_sortMode === 'cat'  ? ' active' : ''}" onclick="Detail._setSort('cat')">区分順</button>
+      </div>`;
 
     if (md.entries.length === 0) {
-      el.innerHTML = `
+      el.innerHTML = sortBar + `
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
           まだ明細がありません
@@ -226,20 +240,36 @@ const Detail = (() => {
       return;
     }
 
-    // 日付順ソート
-    const sorted = [...md.entries].sort((a, b) => a.day - b.day || 0);
+    // ソート
+    let sorted = [...md.entries];
+    let getGroup;
+
+    if (_sortMode === 'item') {
+      sorted.sort((a, b) => a.item.localeCompare(b.item, 'ja') || a.day - b.day);
+      getGroup = e => escHtml(e.item);
+    } else if (_sortMode === 'cat') {
+      const catOrder = Object.fromEntries(cats.map((c, i) => [c.id, i]));
+      sorted.sort((a, b) =>
+        (catOrder[a.categoryId] ?? 999) - (catOrder[b.categoryId] ?? 999) || a.day - b.day
+      );
+      getGroup = e => escHtml(catMap[e.categoryId] || '未分類');
+    } else {
+      sorted.sort((a, b) => a.day - b.day);
+      getGroup = e => `${e.day}日`;
+    }
 
     const total = sorted.reduce((s, e) => s + e.amount, 0);
 
-    let html = `<div class="detail-list-header">
+    let html = sortBar + `<div class="detail-list-header">
       <span class="detail-list-count">${sorted.length}件 / 合計 ${formatCurrency(total)}</span>
     </div>`;
 
-    let prevDay = null;
+    let prevGroup = null;
     sorted.forEach(entry => {
-      if (entry.day !== prevDay) {
-        html += `<div class="day-group-header">${entry.day}日</div>`;
-        prevDay = entry.day;
+      const group = getGroup(entry);
+      if (group !== prevGroup) {
+        html += `<div class="day-group-header">${group}</div>`;
+        prevGroup = group;
       }
       const catName = catMap[entry.categoryId] || '未分類';
       html += `
@@ -318,11 +348,112 @@ const Detail = (() => {
           </select>
         </div>
       </div>
+      <p class="form-hint" style="margin-top:8px">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+        Enter/→で次へ、←で前へ。区分は番号を入力しEnterで保存
+      </p>
       <div class="modal-btns">
         <button class="btn-cancel" onclick="Modal.close()">キャンセル</button>
         <button class="btn-save" onclick="Detail._saveEditEntry('${id}')">保存</button>
       </div>
     `);
+
+    _bindEditFormEvents(id);
+  }
+
+  /* ===== 編集モーダル キーボードナビゲーション ===== */
+  function _bindEditFormEvents(id) {
+    setTimeout(() => {
+      const monthEl = document.getElementById('edit-month');
+      const dayEl   = document.getElementById('edit-day');
+      const itemEl  = document.getElementById('edit-item');
+      const amtEl   = document.getElementById('edit-amount');
+      const catEl   = document.getElementById('edit-cat');
+      if (!monthEl || !dayEl || !itemEl || !amtEl || !catEl) return;
+
+      let buf = ''; // 区分バッファ（このモーダル専用）
+
+      // 月: Enter/→ → 日へ
+      monthEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === 'ArrowRight') {
+          e.preventDefault(); dayEl.focus(); dayEl.select();
+        }
+      });
+
+      // 日: Enter/→ → 項目へ、← → 月へ
+      dayEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === 'ArrowRight') {
+          e.preventDefault(); itemEl.focus(); itemEl.select();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault(); monthEl.focus();
+        }
+      });
+
+      // 項目: Enter/→(末尾) → 金額へ、←(先頭) → 日へ
+      itemEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault(); amtEl.focus(); amtEl.select();
+        } else if (e.key === 'ArrowLeft' && itemEl.selectionStart === 0 && itemEl.selectionEnd === 0) {
+          e.preventDefault(); dayEl.focus(); dayEl.select();
+        } else if (e.key === 'ArrowRight' && itemEl.selectionStart === itemEl.value.length) {
+          e.preventDefault(); amtEl.focus(); amtEl.select();
+        }
+      });
+
+      // 金額: Enter/→ → 区分へ、← → 項目へ
+      amtEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === 'ArrowRight') {
+          e.preventDefault(); buf = ''; catEl.focus();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault(); itemEl.focus(); itemEl.select();
+        }
+      });
+
+      // 区分: Enter → 保存、← → 金額へ、数字 → バッファ選択（10〜12対応）
+      catEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          buf = ''; catEl.classList.remove('cat-num-active');
+          Detail._saveEditEntry(id);
+          return;
+        }
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          buf = ''; catEl.classList.remove('cat-num-active');
+          amtEl.focus(); amtEl.select();
+          return;
+        }
+        if (/^[0-9]$/.test(e.key)) {
+          e.preventDefault();
+          const cs = Storage.getCategories();
+          const tentative = buf + e.key;
+          const num = parseInt(tentative);
+          if (tentative.length <= 2 && num >= 1 && num <= cs.length) {
+            buf = tentative;
+            catEl.value = cs[num - 1].id;
+            catEl.classList.add('cat-num-active');
+          } else {
+            const singleNum = parseInt(e.key);
+            if (singleNum >= 1 && singleNum <= cs.length) {
+              buf = e.key;
+              catEl.value = cs[singleNum - 1].id;
+              catEl.classList.add('cat-num-active');
+            } else {
+              buf = '';
+              catEl.classList.remove('cat-num-active');
+            }
+          }
+        }
+      });
+
+      catEl.addEventListener('blur', () => {
+        buf = ''; catEl.classList.remove('cat-num-active');
+      });
+
+      // 数値フィールドはフォーカス時に全選択
+      [dayEl, amtEl].forEach(el => el.addEventListener('focus', () => el.select()));
+
+    }, 80); // モーダルDOM描画後に実行
   }
 
   function _saveEditEntry(id) {
@@ -411,6 +542,7 @@ const Detail = (() => {
     openEditEntry,
     _saveEditEntry,
     deleteEntry,
-    _selectSuggestion
+    _selectSuggestion,
+    _setSort
   };
 })();

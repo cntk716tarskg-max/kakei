@@ -36,7 +36,15 @@ const Storage = (() => {
   function getMonthData(year, month) {
     const data = loadAll();
     const key  = monthKey(year, month);
-    if (data.months[key]) return data.months[key];
+    if (data.months[key]) {
+      // Firestoreから取得した古いデータに欠損フィールドがあっても補完する
+      const md = data.months[key];
+      if (!Array.isArray(md.income))                    md.income     = [];
+      if (!Array.isArray(md.fixedCosts))                md.fixedCosts = [];
+      if (!md.budgets || typeof md.budgets !== 'object') md.budgets    = {};
+      if (!Array.isArray(md.entries))                   md.entries    = [];
+      return md;
+    }
 
     // 前月からコピーして初期化
     let py = year, pm = month - 1;
@@ -45,8 +53,10 @@ const Storage = (() => {
 
     const md = {
       income:     [],
-      budgets:    prev ? Object.assign({}, prev.budgets) : {},
-      fixedCosts: prev ? prev.fixedCosts.map(f => Object.assign({}, f)) : [],
+      budgets:    prev && prev.budgets ? Object.assign({}, prev.budgets) : {},
+      fixedCosts: prev && Array.isArray(prev.fixedCosts)
+                    ? prev.fixedCosts.map(f => Object.assign({}, f))
+                    : [],
       entries:    []
     };
     data.months[key] = md;
