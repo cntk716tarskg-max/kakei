@@ -1,0 +1,205 @@
+/* =====================================================
+   overview.css — 全体管理ページ
+   ===================================================== */
+
+/* ===== サマリーバー（4項目横並び） ===== */
+.summary-bar {
+  display: flex;
+  align-items: stretch;
+  background: var(--clr-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.sbar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 4px 12px;
+  gap: 4px;
+  position: relative;
+  min-width: 0;
+}
+
+/* 縦区切り線 */
+.sbar-item + .sbar-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18%;
+  height: 64%;
+  width: 1px;
+  background: var(--clr-border);
+}
+
+.sbar-icon {
+  line-height: 0;
+  color: var(--clr-text-sub);
+  opacity: .6;
+}
+.sbar-icon svg { width: 14px; height: 14px; }
+
+.sbar-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--clr-text-sub);
+  white-space: nowrap;
+}
+
+.sbar-value {
+  font-size: clamp(12px, 3.6vw, 17px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--clr-text);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 支出 — オレンジ強調 */
+.sbar-item.accent-expense {
+  background: var(--clr-primary-light);
+}
+.sbar-item.accent-expense .sbar-icon   { color: var(--clr-primary-dark); opacity: 1; }
+.sbar-item.accent-expense .sbar-label  { color: var(--clr-primary-dark); }
+.sbar-item.accent-expense .sbar-value  { color: var(--clr-primary-dark); }
+
+/* 残額 — 緑 or 赤 */
+.sbar-item.accent-positive .sbar-value { color: var(--clr-success); }
+.sbar-item.accent-negative .sbar-value { color: var(--clr-danger); }
+
+/* 予算が収入を超過 — 赤警告 */
+.sbar-item.accent-budget-over .sbar-value { color: var(--clr-danger); }
+.sbar-item.accent-budget-over .sbar-label { color: var(--clr-danger); }
+
+/* ===== 区分テーブル ===== */
+.cat-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cat-table thead th {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--clr-text-sub);
+  text-align: right;
+  padding: 4px 6px 8px;
+  letter-spacing: .3px;
+}
+.cat-table thead th:first-child { text-align: left; }
+
+.cat-table tbody tr {
+  border-top: 1px solid var(--clr-bg);
+}
+.cat-table tbody tr:first-child { border-top: none; }
+
+.cat-table td {
+  padding: 9px 6px;
+  font-size: 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cat-table td:first-child {
+  text-align: left;
+  font-weight: 600;
+  color: var(--clr-text);
+}
+
+.cat-table .col-budget { color: var(--clr-text-sub); }
+.cat-table .col-expense { color: var(--clr-text); font-weight: 600; }
+.cat-table .col-remain.positive { color: var(--clr-success); font-weight: 700; }
+.cat-table .col-remain.negative { color: var(--clr-danger); font-weight: 700; }
+
+/* 区分名セル（編集ボタン付き） */
+.cat-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cat-name-text { flex: 1; }
+
+/* 予算額タップで編集 */
+.cat-budget-btn {
+  text-align: right;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--clr-text-sub);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  width: 100%;
+}
+.cat-budget-btn:active { color: var(--clr-primary); }
+
+/* テーブル合計行 */
+.cat-table tfoot tr {
+  border-top: 2px solid var(--clr-border);
+}
+.cat-table tfoot td {
+  padding: 9px 6px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cat-table tfoot td:first-child { text-align: left; }
+
+/* ===== 収入・固定費 セクション ===== */
+.section-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--clr-bg);
+}
+.section-list-item:last-child { border-bottom: none; }
+
+.sli-label { flex: 1; font-size: 14px; }
+.sli-amount {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-total {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1.5px solid var(--clr-border);
+}
+.section-total-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--clr-text-sub);
+  text-transform: uppercase;
+}
+.section-total-value {
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* プログレスバー（区分ごとの消費率） */
+.progress-bar-wrap {
+  height: 4px;
+  background: var(--clr-bg);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-top: 3px;
+}
+.progress-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--clr-primary);
+  transition: width .4s ease;
+}
+.progress-bar-fill.over { background: var(--clr-danger); }

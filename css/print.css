@@ -1,0 +1,220 @@
+/* =====================================================
+   print.css — 印刷プレビュー & @media print
+   ===================================================== */
+
+/* ===== 印刷ページ（ブラウザ上プレビュー） ===== */
+#print-actions-bar {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+#print-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* A4 シミュレーション（画面上） */
+.print-page {
+  background: var(--clr-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 28px 28px 32px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.print-page-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--clr-text-sub);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 印刷内コンテンツ */
+.print-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--clr-primary);
+  margin-bottom: 2px;
+}
+.print-subtitle {
+  font-size: 13px;
+  color: var(--clr-text-sub);
+  margin-bottom: 18px;
+}
+
+.print-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--clr-text-sub);
+  border-bottom: 2px solid var(--clr-primary);
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+  margin-top: 18px;
+}
+
+/* サマリー行 */
+.print-summary-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.print-summary-item {
+  flex: 1;
+  min-width: 100px;
+  background: var(--clr-bg);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.print-summary-item .ps-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--clr-text-sub);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.print-summary-item .ps-value {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+
+/* 区分テーブル（印刷用） */
+.print-cat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.print-cat-table th {
+  text-align: right;
+  padding: 5px 8px;
+  background: var(--clr-primary-light);
+  color: var(--clr-primary-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .3px;
+}
+.print-cat-table th:first-child { text-align: left; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.print-cat-table th:last-child  { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.print-cat-table td {
+  text-align: right;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--clr-bg);
+  font-variant-numeric: tabular-nums;
+}
+.print-cat-table td:first-child { text-align: left; font-weight: 600; }
+.print-cat-table tfoot td {
+  font-weight: 800;
+  border-top: 2px solid var(--clr-border);
+  border-bottom: none;
+}
+
+/* 収入・固定費 */
+.print-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.print-list-table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--clr-bg);
+  font-variant-numeric: tabular-nums;
+}
+.print-list-table td:last-child { text-align: right; font-weight: 700; }
+
+/* 明細テーブル */
+.print-entries-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.print-entries-table th {
+  padding: 5px 6px;
+  background: var(--clr-primary-light);
+  color: var(--clr-primary-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .3px;
+}
+.print-entries-table th:first-child { text-align: center; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.print-entries-table th:last-child  { text-align: right; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.print-entries-table th.col-item { text-align: left; }
+.print-entries-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--clr-bg);
+  font-variant-numeric: tabular-nums;
+}
+.print-entries-table td:first-child { text-align: center; color: var(--clr-text-sub); }
+.print-entries-table td:last-child  { text-align: right; font-weight: 600; }
+.print-entries-table tfoot td {
+  font-weight: 800;
+  border-top: 2px solid var(--clr-border);
+  border-bottom: none;
+  text-align: right;
+}
+.print-entries-table tfoot td:first-child { text-align: left; }
+
+/* ===== 多段組明細テーブル（2ページ目の inline table 用グローバル補完） ===== */
+#print-preview table {
+  border-collapse: collapse;
+}
+#print-preview table th {
+  background: var(--clr-primary-light);
+  color: var(--clr-primary-dark);
+  padding: 4px 5px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .3px;
+}
+#print-preview table td {
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--clr-bg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== @media print ===== */
+@media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  body, #app { height: auto !important; overflow: visible !important; }
+
+  #app-header, #bottom-nav, #print-actions-bar, .print-page-label { display: none !important; }
+
+  #app-main { overflow: visible !important; height: auto !important; }
+
+  .page { display: none !important; height: auto; overflow: visible; padding: 0; }
+  #page-print { display: block !important; padding: 0; }
+
+  #print-preview {
+    gap: 0;
+  }
+
+  .print-page {
+    padding: 18mm 20mm;
+    box-shadow: none;
+    border-radius: 0;
+    page-break-after: always;
+    width: 210mm;
+    min-height: 297mm;
+    break-after: page;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  @page { size: A4 portrait; margin: 0; }
+}

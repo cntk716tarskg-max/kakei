@@ -1,0 +1,85 @@
+/* =====================================================
+   calendar.css — カレンダーコンポーネント
+   ===================================================== */
+
+#calendar-section {
+  margin-bottom: 12px;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+/* 曜日ヘッダー */
+.cal-dow {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--clr-text-sub);
+  padding: 4px 0 6px;
+  letter-spacing: .3px;
+}
+.cal-dow.sun { color: #EF4444; }
+.cal-dow.sat { color: #3B82F6; }
+
+/* 日付セル */
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+  padding: 2px;
+  gap: 2px;
+  min-height: 36px;
+}
+
+.cal-cell.empty {
+  pointer-events: none;
+}
+
+.cal-cell.today {
+  background: var(--clr-primary-light);
+  font-weight: 800;
+  color: var(--clr-primary-dark);
+}
+
+.cal-cell.has-entry .cal-mark {
+  display: block;
+}
+
+.cal-cell.sun .cal-num { color: #EF4444; }
+.cal-cell.sat .cal-num { color: #3B82F6; }
+.cal-cell.today .cal-num { color: var(--clr-primary-dark); }
+
+.cal-num {
+  line-height: 1;
+  font-size: 13px;
+}
+
+/* エントリーマーカー（シルエットアイコン） */
+.cal-mark {
+  display: none;          /* has-entry のとき表示 */
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: var(--clr-primary);
+}
+
+.cal-cell.today .cal-mark {
+  color: var(--clr-primary-dark);
+}
+
+/* マーク非表示のとき高さを揃えるスペーサー */
+.cal-spacer {
+  display: block;
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
