@@ -189,7 +189,7 @@ const Detail = (() => {
     const max = daysInMonth(_year, _month);
     if (!day || day < 1 || day > max) { dayEl.classList.add('input-error'); valid = false; }
     if (!item)   { itemEl.classList.add('input-error'); valid = false; }
-    if (!amount || amount <= 0) { amtEl.classList.add('input-error'); valid = false; }
+    if (amount < 0) { amtEl.classList.add('input-error'); valid = false; }
     if (!catId)  { catEl.classList.add('input-error'); valid = false; }
     if (!valid) return;
 

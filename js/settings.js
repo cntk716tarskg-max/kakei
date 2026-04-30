@@ -194,7 +194,7 @@ const Settings = (() => {
   function _saveIncomeAdd(year, month) {
     const label  = (document.getElementById('inc-label').value  || '').trim();
     const amount = parseInt(document.getElementById('inc-amount').value) || 0;
-    if (!label || amount <= 0) return;
+    if (!label || amount < 0) return;
 
     const md = Storage.getMonthData(year, month);
     md.income.push({ id: Storage.genId(), label, amount });
@@ -233,7 +233,7 @@ const Settings = (() => {
   function _saveIncomeEdit(id, year, month) {
     const label  = (document.getElementById('inc-label').value  || '').trim();
     const amount = parseInt(document.getElementById('inc-amount').value) || 0;
-    if (!label || amount <= 0) return;
+    if (!label || amount < 0) return;
 
     const md  = Storage.getMonthData(year, month);
     const idx = md.income.findIndex(i => i.id === id);
@@ -284,7 +284,7 @@ const Settings = (() => {
   function _saveFixedAdd(year, month) {
     const label  = (document.getElementById('fix-label').value  || '').trim();
     const amount = parseInt(document.getElementById('fix-amount').value) || 0;
-    if (!label || amount <= 0) return;
+    if (!label || amount < 0) return;
 
     const md = Storage.getMonthData(year, month);
     md.fixedCosts.push({ id: Storage.genId(), label, amount });
@@ -323,7 +323,7 @@ const Settings = (() => {
   function _saveFixedEdit(id, year, month) {
     const label  = (document.getElementById('fix-label').value  || '').trim();
     const amount = parseInt(document.getElementById('fix-amount').value) || 0;
-    if (!label || amount <= 0) return;
+    if (!label || amount < 0) return;
 
     const md  = Storage.getMonthData(year, month);
     const idx = md.fixedCosts.findIndex(f => f.id === id);
