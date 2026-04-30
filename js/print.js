@@ -7,14 +7,32 @@
 
 const Print = (() => {
 
+  let _sortOrder = 'date'; // 'date' | 'item' | 'category'
+
   function render(year, month) {
-    _renderActionsBar();
+    _renderActionsBar(year, month);
     _renderPreview(year, month);
   }
 
+  function setSortOrder(order, year, month) {
+    _sortOrder = order;
+    render(year, month);
+  }
+
   /* ===== アクションボタン ===== */
-  function _renderActionsBar() {
+  function _renderActionsBar(year, month) {
+    const sorts = [
+      { key: 'date',     label: '日付順' },
+      { key: 'item',     label: '項目順' },
+      { key: 'category', label: '区分順' },
+    ];
+    const sortBtns = sorts.map(s =>
+      `<button class="btn-sort${_sortOrder === s.key ? ' active' : ''}"
+               onclick="Print.setSortOrder('${s.key}', ${year}, ${month})">${s.label}</button>`
+    ).join('');
+
     document.getElementById('print-actions-bar').innerHTML = `
+      <div class="print-sort-group">${sortBtns}</div>
       <button class="btn-primary" onclick="window.print()">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
@@ -245,7 +263,22 @@ const Print = (() => {
      ===================================================== */
   function _buildPage2(year, month, md, cats) {
     const catMap = Object.fromEntries(cats.map(c => [c.id, c.name]));
-    const sorted = [...md.entries].sort((a, b) => a.day - b.day);
+
+    let sorted;
+    if (_sortOrder === 'item') {
+      sorted = [...md.entries].sort((a, b) =>
+        a.item.localeCompare(b.item, 'ja') || a.day - b.day
+      );
+    } else if (_sortOrder === 'category') {
+      sorted = [...md.entries].sort((a, b) => {
+        const ca = catMap[a.categoryId] || '￿';
+        const cb = catMap[b.categoryId] || '￿';
+        return ca.localeCompare(cb, 'ja') || a.day - b.day;
+      });
+    } else {
+      sorted = [...md.entries].sort((a, b) => a.day - b.day);
+    }
+
     const total  = sorted.reduce((s, e) => s + e.amount, 0);
     const count  = sorted.length;
 
@@ -328,5 +361,5 @@ const Print = (() => {
     `;
   }
 
-  return { render };
+  return { render, setSortOrder };
 })();

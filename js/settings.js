@@ -142,9 +142,24 @@ const Settings = (() => {
     const inp    = document.getElementById('budget-input');
     const amount = parseInt(inp ? inp.value : '0') || 0;
 
+    // 現在月を保存（Firestore push も内部で発火）
     const md = Storage.getMonthData(year, month);
     md.budgets[catId] = amount;
     Storage.saveMonthData(year, month, md);
+
+    // 既存の未来月にも同じ予算を反映（未来月は次回ナビゲーション時に Firestore へ push）
+    const data    = Storage.loadAll();
+    const fromKey = Storage.monthKey(year, month);
+    let   changed = false;
+    Object.keys(data.months).forEach(mk => {
+      if (mk > fromKey) {
+        if (!data.months[mk].budgets) data.months[mk].budgets = {};
+        data.months[mk].budgets[catId] = amount;
+        changed = true;
+      }
+    });
+    if (changed) Storage.saveAll(data);
+
     Modal.close();
     App.refresh();
   }
