@@ -52,12 +52,15 @@ const Storage = (() => {
     const prev = data.months[monthKey(py, pm)];
 
     const md = {
-      income:     [],
-      budgets:    prev && prev.budgets ? Object.assign({}, prev.budgets) : {},
-      fixedCosts: prev && Array.isArray(prev.fixedCosts)
-                    ? prev.fixedCosts.map(f => Object.assign({}, f, { amount: 0 }))
-                    : [],
-      entries:    []
+      income:      [],
+      budgets:     prev && prev.budgets ? Object.assign({}, prev.budgets) : {},
+      fixedCosts:  prev && Array.isArray(prev.fixedCosts)
+                     ? prev.fixedCosts.map(f => Object.assign({}, f, { amount: 0 }))
+                     : [],
+      baseIncomeItems: prev && Array.isArray(prev.baseIncomeItems)
+                         ? prev.baseIncomeItems.map(b => Object.assign({}, b))
+                         : [],
+      entries:     []
     };
     data.months[key] = md;
     saveAll(data);

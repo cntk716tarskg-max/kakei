@@ -2,7 +2,7 @@
    overview.css — 全体管理ページ
    ===================================================== */
 
-/* ===== サマリーバー（4項目横並び） ===== */
+/* ===== サマリーバー（5項目横並び） ===== */
 .summary-bar {
   display: flex;
   align-items: stretch;
@@ -19,11 +19,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 14px 4px 12px;
-  gap: 4px;
+  padding: 12px 2px 10px;
+  gap: 3px;
   position: relative;
   min-width: 0;
 }
+
+/* 5項目のラベルはアイコンを非表示にしてコンパクト化 */
+.summary-bar-5 .sbar-icon { display: none; }
+.summary-bar-5 .sbar-label { letter-spacing: 0; white-space: normal; text-align: center; line-height: 1.2; }
+.summary-bar-5 .sbar-value { font-size: clamp(11px, 3.2vw, 15px); }
 
 /* 縦区切り線 */
 .sbar-item + .sbar-item::before {
@@ -165,6 +170,31 @@
   font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* 合計行の2段金額（実績 + 基本収入） */
+.section-total-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.section-base-display {
+  font-size: 12px;
+  color: var(--clr-text-sub);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  line-height: 1.4;
+}
+
+/* サマリーバー — 基本収入（収入の下に薄いグレー） */
+.sbar-base {
+  font-size: 10px;
+  color: var(--clr-text-sub);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+  line-height: 1;
 }
 
 .section-total {

@@ -127,14 +127,15 @@ const Print = (() => {
      ===================================================== */
   function _buildPage1(year, month, md, cats) {
     /* ---- 数値計算 ---- */
-    const incomeTotal  = md.income.reduce((s, i) => s + i.amount, 0);
-    const fixedTotal   = md.fixedCosts.reduce((s, f) => s + f.amount, 0);
-    const catBudget    = cats.reduce((s, c) => s + (md.budgets[c.id] || 0), 0);
-    const budgetTotal  = catBudget + fixedTotal;
-    const entriesSum   = md.entries.reduce((s, e) => s + e.amount, 0);
-    const expenseTotal = entriesSum + fixedTotal;
-    const remaining    = budgetTotal - expenseTotal;
-    const markedDays   = [...new Set(md.entries.map(e => e.day))];
+    const incomeTotal    = md.income.reduce((s, i) => s + i.amount, 0);
+    const fixedTotal     = md.fixedCosts.reduce((s, f) => s + f.amount, 0);
+    const catBudget      = cats.reduce((s, c) => s + (md.budgets[c.id] || 0), 0);
+    const budgetTotal    = catBudget;                  // 固定費を除く
+    const entriesSum     = md.entries.reduce((s, e) => s + e.amount, 0);
+    const expenseNoFixed = entriesSum;                 // 支出（固定費を除く）
+    const expenseTotal   = entriesSum + fixedTotal;    // 支出（固定費を含む）
+    const remaining      = budgetTotal - expenseNoFixed;
+    const markedDays     = [...new Set(md.entries.map(e => e.day))];
 
     /* ---- 予算超過カラー ---- */
     const budgetColor  = budgetTotal > incomeTotal ? '#DC2626' : '#1C1917';
@@ -189,7 +190,7 @@ const Print = (() => {
         </div>
 
         <!-- ② サマリー行 -->
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px">
           <div class="print-summary-item">
             <div class="ps-label">収入合計</div>
             <div class="ps-value">${formatCurrency(incomeTotal)}</div>
@@ -198,8 +199,12 @@ const Print = (() => {
             <div class="ps-label">予算合計</div>
             <div class="ps-value" style="color:${budgetColor}">${formatCurrency(budgetTotal)}</div>
           </div>
-          <div class="print-summary-item">
-            <div class="ps-label">支出合計</div>
+          <div class="print-summary-item" style="background:#FFF4EB">
+            <div class="ps-label" style="color:#D97B3A">支出（固定除）</div>
+            <div class="ps-value" style="color:#D97B3A">${formatCurrency(expenseNoFixed)}</div>
+          </div>
+          <div class="print-summary-item" style="background:#FFF4EB">
+            <div class="ps-label" style="color:#D97B3A">支出合計</div>
             <div class="ps-value" style="color:#D97B3A">${formatCurrency(expenseTotal)}</div>
           </div>
           <div class="print-summary-item">

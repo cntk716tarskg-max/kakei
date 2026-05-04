@@ -13,27 +13,25 @@ const Overview = (() => {
     _renderCalendar(year, month, md.entries);
     _renderSummary(computed);
     _renderCategories(year, month, cats, md, computed);
-    _renderFixed(year, month, md);    // 固定費を先に
-    _renderIncome(year, month, md);   // 収入を最後
+    _renderFixed(year, month, md);
+    _renderIncome(year, month, md);
+    _renderBaseIncome(year, month, md);
   }
 
   /* ===== 計算 ===== */
   function _compute(md, cats) {
-    const incomeTotal = md.income.reduce((s, i) => s + i.amount, 0);
-    const fixedTotal  = md.fixedCosts.reduce((s, f) => s + f.amount, 0);
-
-    // 区分別予算合計
+    const incomeTotal    = md.income.reduce((s, i) => s + i.amount, 0);
+    const fixedTotal     = md.fixedCosts.reduce((s, f) => s + f.amount, 0);
     const catBudgetTotal = cats.reduce((s, c) => s + (md.budgets[c.id] || 0), 0);
 
-    // 予算合計 = 区分別合計 + 固定費
-    const budgetTotal  = catBudgetTotal + fixedTotal;
-    // 支出合計 = 明細合計 + 固定費
-    const entriesTotal = md.entries.reduce((s, e) => s + e.amount, 0);
-    const expenseTotal = entriesTotal + fixedTotal;
-    const remaining    = budgetTotal - expenseTotal;
-    const incomeDiff   = incomeTotal - budgetTotal;
+    // 予算 = 区分別合計のみ（固定費を除く）
+    const budgetTotal    = catBudgetTotal;
+    const entriesTotal   = md.entries.reduce((s, e) => s + e.amount, 0);
+    const expenseNoFixed = entriesTotal;             // 支出（固定費を除く）
+    const expenseTotal   = entriesTotal + fixedTotal; // 支出（固定費を含む）
+    const remaining      = budgetTotal - expenseNoFixed;
+    const incomeDiff     = incomeTotal - budgetTotal;
 
-    // 区分別
     const catStats = cats.map(c => {
       const budget  = md.budgets[c.id] || 0;
       const expense = md.entries
@@ -42,10 +40,12 @@ const Overview = (() => {
       return { id: c.id, name: c.name, budget, expense, remaining: budget - expense };
     });
 
+    const baseIncomeTotal = (md.baseIncomeItems || []).reduce((s, b) => s + b.amount, 0);
+
     return {
       incomeTotal, fixedTotal, catBudgetTotal,
-      budgetTotal, expenseTotal, remaining, incomeDiff,
-      catStats
+      budgetTotal, expenseNoFixed, expenseTotal, remaining, incomeDiff,
+      catStats, baseIncomeTotal
     };
   }
 
@@ -57,36 +57,39 @@ const Overview = (() => {
 
   /* ===== サマリー（横並びバー） ===== */
   function _renderSummary(c) {
-    const remClass    = c.remaining  < 0 ? 'accent-negative' : 'accent-positive';
+    const remClass    = c.remaining < 0 ? 'accent-negative' : 'accent-positive';
     const budgetClass = c.budgetTotal > c.incomeTotal ? 'accent-budget-over' : '';
 
+    const ICON_INCOME  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>`;
+    const ICON_BUDGET  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-7-2h2V7h-4v2h2z"/></svg>`;
+    const ICON_EXPENSE = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`;
+    const ICON_REMAIN  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/></svg>`;
+
     document.getElementById('summary-section').innerHTML = `
-      <div class="summary-bar card">
+      <div class="summary-bar summary-bar-5 card">
         <div class="sbar-item">
-          <div class="sbar-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
-          </div>
+          <div class="sbar-icon">${ICON_INCOME}</div>
           <span class="sbar-label">収入</span>
           <span class="sbar-value">${formatCurrency(c.incomeTotal)}</span>
+          ${c.baseIncomeTotal > 0 ? `<span class="sbar-base">${formatCurrency(c.baseIncomeTotal)}</span>` : ''}
         </div>
         <div class="sbar-item ${budgetClass}">
-          <div class="sbar-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-7-2h2V7h-4v2h2z"/></svg>
-          </div>
+          <div class="sbar-icon">${ICON_BUDGET}</div>
           <span class="sbar-label">予算</span>
           <span class="sbar-value">${formatCurrency(c.budgetTotal)}</span>
         </div>
         <div class="sbar-item accent-expense">
-          <div class="sbar-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-          </div>
+          <div class="sbar-icon">${ICON_EXPENSE}</div>
+          <span class="sbar-label">支出（固除）</span>
+          <span class="sbar-value">${formatCurrency(c.expenseNoFixed)}</span>
+        </div>
+        <div class="sbar-item accent-expense">
+          <div class="sbar-icon">${ICON_EXPENSE}</div>
           <span class="sbar-label">支出</span>
           <span class="sbar-value">${formatCurrency(c.expenseTotal)}</span>
         </div>
         <div class="sbar-item ${remClass}">
-          <div class="sbar-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/></svg>
-          </div>
+          <div class="sbar-icon">${ICON_REMAIN}</div>
           <span class="sbar-label">残額</span>
           <span class="sbar-value">${formatCurrency(c.remaining)}</span>
         </div>
@@ -176,8 +179,10 @@ const Overview = (() => {
 
   /* ===== 収入セクション ===== */
   function _renderIncome(year, month, md) {
-    const el    = document.getElementById('income-section');
-    const total = md.income.reduce((s, i) => s + i.amount, 0);
+    const el        = document.getElementById('income-section');
+    const total     = md.income.reduce((s, i) => s + i.amount, 0);
+    const baseTotal = (md.baseIncomeItems || []).reduce((s, b) => s + b.amount, 0);
+    const hasBase   = (md.baseIncomeItems || []).length > 0;
 
     const rows = md.income.map(i => `
       <div class="section-list-item">
@@ -211,7 +216,10 @@ const Overview = (() => {
         ${empty}
         <div class="section-total">
           <span class="section-total-label">合計</span>
-          <span class="section-total-value">${formatCurrency(total)}</span>
+          <div class="section-total-amounts">
+            <span class="section-total-value">${formatCurrency(total)}</span>
+            ${hasBase ? `<span class="section-base-display">${formatCurrency(baseTotal)}</span>` : ''}
+          </div>
         </div>
       </div>
     `;
@@ -254,6 +262,50 @@ const Overview = (() => {
         ${empty}
         <div class="section-total">
           <span class="section-total-label">合計（予算・支出に反映）</span>
+          <span class="section-total-value">${formatCurrency(total)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ===== 基本収入セクション ===== */
+  function _renderBaseIncome(year, month, md) {
+    const el    = document.getElementById('base-income-section');
+    const items = md.baseIncomeItems || [];
+    const total = items.reduce((s, b) => s + b.amount, 0);
+
+    const rows = items.map(b => `
+      <div class="section-list-item">
+        <span class="sli-label">${escHtml(b.label)}</span>
+        <span class="sli-amount">${formatCurrency(b.amount)}</span>
+        <button class="btn-icon-sm" onclick="Settings.openBaseItemEdit('${b.id}', ${year}, ${month})" title="編集">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
+        <button class="btn-icon-sm btn-danger-ghost" onclick="Settings.deleteBaseItem('${b.id}', ${year}, ${month})" title="削除">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+      </div>
+    `).join('');
+
+    const empty = items.length === 0
+      ? '<div class="empty-state" style="padding:16px 0">基本収入を追加してください</div>'
+      : rows;
+
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-title">
+          <div class="card-title-left">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+            基本収入
+          </div>
+          <button class="btn-ghost" onclick="Settings.openBaseItemAdd(${year}, ${month})">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            追加
+          </button>
+        </div>
+        ${empty}
+        <div class="section-total">
+          <span class="section-total-label">合計（翌月以降に引き継ぎ）</span>
           <span class="section-total-value">${formatCurrency(total)}</span>
         </div>
       </div>

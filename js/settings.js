@@ -252,6 +252,121 @@ const Settings = (() => {
   }
 
   /* =========================================
+     基本収入 CRUD
+     ========================================= */
+
+  function openBaseItemAdd(year, month) {
+    Modal.open('基本収入を追加', `
+      <div class="form-group">
+        <label class="form-label">名称</label>
+        <input id="base-label" class="form-input" type="text" placeholder="例：給与" maxlength="30">
+      </div>
+      <div class="form-group">
+        <label class="form-label">金額（¥）</label>
+        <input id="base-amount" class="form-input" type="number" min="0"
+          inputmode="numeric" placeholder="0">
+      </div>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="Modal.close()">キャンセル</button>
+        <button class="btn-save" onclick="Settings._saveBaseItemAdd(${year}, ${month})">追加</button>
+      </div>
+    `);
+
+    _bindEnter([
+      { from: 'base-label',  to: 'base-amount', save: null },
+      { from: 'base-amount', to: null, save: () => Settings._saveBaseItemAdd(year, month) }
+    ]);
+  }
+
+  function _saveBaseItemAdd(year, month) {
+    const label  = (document.getElementById('base-label')?.value  || '').trim();
+    const amount = parseInt(document.getElementById('base-amount')?.value) || 0;
+    if (!label || amount < 0) return;
+
+    const md = Storage.getMonthData(year, month);
+    if (!md.baseIncomeItems) md.baseIncomeItems = [];
+    const newItem = { id: Storage.genId(), label, amount };
+    md.baseIncomeItems.push(newItem);
+    Storage.saveMonthData(year, month, md);
+
+    // 翌月以降の既存月に同じ項目を追加（前月は変更しない）
+    const data    = Storage.loadAll();
+    const fromKey = Storage.monthKey(year, month);
+    Object.keys(data.months).forEach(mk => {
+      if (mk > fromKey) {
+        if (!data.months[mk].baseIncomeItems) data.months[mk].baseIncomeItems = [];
+        if (!data.months[mk].baseIncomeItems.some(b => b.id === newItem.id)) {
+          data.months[mk].baseIncomeItems.push(Object.assign({}, newItem));
+        }
+      }
+    });
+    Storage.saveAll(data);
+
+    Modal.close();
+    App.refresh();
+  }
+
+  function openBaseItemEdit(id, year, month) {
+    const md   = Storage.getMonthData(year, month);
+    const item = (md.baseIncomeItems || []).find(b => b.id === id);
+    if (!item) return;
+
+    Modal.open('基本収入を編集', `
+      <div class="form-group">
+        <label class="form-label">名称</label>
+        <input id="base-label" class="form-input" type="text" value="${escHtml(item.label)}" maxlength="30">
+      </div>
+      <div class="form-group">
+        <label class="form-label">金額（¥）</label>
+        <input id="base-amount" class="form-input" type="number" min="0"
+          inputmode="numeric" value="${item.amount}">
+      </div>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="Modal.close()">キャンセル</button>
+        <button class="btn-save" onclick="Settings._saveBaseItemEdit('${id}', ${year}, ${month})">保存</button>
+      </div>
+    `);
+
+    _bindEnter([
+      { from: 'base-label',  to: 'base-amount', save: null },
+      { from: 'base-amount', to: null, save: () => Settings._saveBaseItemEdit(id, year, month) }
+    ]);
+  }
+
+  function _saveBaseItemEdit(id, year, month) {
+    const label  = (document.getElementById('base-label')?.value  || '').trim();
+    const amount = parseInt(document.getElementById('base-amount')?.value) || 0;
+    if (!label || amount < 0) return;
+
+    const md  = Storage.getMonthData(year, month);
+    const idx = (md.baseIncomeItems || []).findIndex(b => b.id === id);
+    if (idx !== -1) md.baseIncomeItems[idx] = { id, label, amount };
+    Storage.saveMonthData(year, month, md);
+
+    // 翌月以降の既存月にも変更を伝播
+    const data    = Storage.loadAll();
+    const fromKey = Storage.monthKey(year, month);
+    Object.keys(data.months).forEach(mk => {
+      if (mk > fromKey && data.months[mk].baseIncomeItems) {
+        const fi = data.months[mk].baseIncomeItems.findIndex(b => b.id === id);
+        if (fi !== -1) data.months[mk].baseIncomeItems[fi] = { id, label, amount };
+      }
+    });
+    Storage.saveAll(data);
+
+    Modal.close();
+    App.refresh();
+  }
+
+  function deleteBaseItem(id, year, month) {
+    if (!confirmDialog('この基本収入を削除しますか？')) return;
+    const md = Storage.getMonthData(year, month);
+    md.baseIncomeItems = (md.baseIncomeItems || []).filter(b => b.id !== id);
+    Storage.saveMonthData(year, month, md);
+    App.refresh();
+  }
+
+  /* =========================================
      固定費 CRUD
      ========================================= */
 
@@ -344,8 +459,9 @@ const Settings = (() => {
   /* ===== 公開 ===== */
   return {
     openCategoryManager, _addCategory, _deleteCategory,
-    openBudgetEdit,  _saveBudget,
-    openIncomeAdd,   _saveIncomeAdd,  openIncomeEdit,  _saveIncomeEdit,  deleteIncome,
-    openFixedAdd,    _saveFixedAdd,   openFixedEdit,   _saveFixedEdit,   deleteFixed
+    openBudgetEdit,      _saveBudget,
+    openIncomeAdd,       _saveIncomeAdd,    openIncomeEdit,    _saveIncomeEdit,    deleteIncome,
+    openBaseItemAdd,     _saveBaseItemAdd,  openBaseItemEdit,  _saveBaseItemEdit,  deleteBaseItem,
+    openFixedAdd,        _saveFixedAdd,     openFixedEdit,     _saveFixedEdit,     deleteFixed
   };
 })();
