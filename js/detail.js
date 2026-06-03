@@ -51,7 +51,7 @@ const Detail = (() => {
           </div>
           <div class="form-group">
             <label class="form-label" for="inp-amount">金額</label>
-            <input id="inp-amount" class="form-input" type="number" min="0"
+            <input id="inp-amount" class="form-input" type="number"
               inputmode="numeric" placeholder="0">
           </div>
         </div>
@@ -189,7 +189,7 @@ const Detail = (() => {
     const max = daysInMonth(_year, _month);
     if (!day || day < 1 || day > max) { dayEl.classList.add('input-error'); valid = false; }
     if (!item)   { itemEl.classList.add('input-error'); valid = false; }
-    if (amount < 0) { amtEl.classList.add('input-error'); valid = false; }
+    if (isNaN(amount)) { amtEl.classList.add('input-error'); valid = false; }
     if (!catId)  { catEl.classList.add('input-error'); valid = false; }
     if (!valid) return;
 
@@ -226,9 +226,10 @@ const Detail = (() => {
 
     const sortBar = `
       <div class="detail-sort-bar">
-        <button class="detail-sort-btn${_sortMode === 'date' ? ' active' : ''}" onclick="Detail._setSort('date')">日付順</button>
-        <button class="detail-sort-btn${_sortMode === 'item' ? ' active' : ''}" onclick="Detail._setSort('item')">項目順</button>
-        <button class="detail-sort-btn${_sortMode === 'cat'  ? ' active' : ''}" onclick="Detail._setSort('cat')">区分順</button>
+        <button class="detail-sort-btn${_sortMode === 'input' ? ' active' : ''}" onclick="Detail._setSort('input')">入力順</button>
+        <button class="detail-sort-btn${_sortMode === 'date'  ? ' active' : ''}" onclick="Detail._setSort('date')">日付順</button>
+        <button class="detail-sort-btn${_sortMode === 'item'  ? ' active' : ''}" onclick="Detail._setSort('item')">項目順</button>
+        <button class="detail-sort-btn${_sortMode === 'cat'   ? ' active' : ''}" onclick="Detail._setSort('cat')">区分順</button>
       </div>`;
 
     if (md.entries.length === 0) {
@@ -244,7 +245,9 @@ const Detail = (() => {
     let sorted = [...md.entries];
     let getGroup;
 
-    if (_sortMode === 'item') {
+    if (_sortMode === 'input') {
+      getGroup = () => null; // グループなし
+    } else if (_sortMode === 'item') {
       sorted.sort((a, b) => a.item.localeCompare(b.item, 'ja') || a.day - b.day);
       getGroup = e => escHtml(e.item);
     } else if (_sortMode === 'cat') {
@@ -258,22 +261,34 @@ const Detail = (() => {
       getGroup = e => `${e.day}日`;
     }
 
-    const total = sorted.reduce((s, e) => s + e.amount, 0);
+    const activeEntries  = sorted.filter(e => !e.excluded);
+    const total          = activeEntries.reduce((s, e) => s + e.amount, 0);
+    const excludedCount  = sorted.length - activeEntries.length;
+    const excludedNote   = excludedCount > 0 ? ` （${excludedCount}件除外）` : '';
 
     let html = sortBar + `<div class="detail-list-header">
-      <span class="detail-list-count">${sorted.length}件 / 合計 ${formatCurrency(total)}</span>
+      <span class="detail-list-count">${activeEntries.length}件 / 合計 ${formatCurrency(total)}${excludedNote}</span>
     </div>`;
+
+    const ICON_CHECKED   = '<path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>';
+    const ICON_UNCHECKED = '<path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>';
 
     let prevGroup = null;
     sorted.forEach(entry => {
       const group = getGroup(entry);
-      if (group !== prevGroup) {
+      if (group !== null && group !== prevGroup) {
         html += `<div class="day-group-header">${group}</div>`;
         prevGroup = group;
       }
       const catName = catMap[entry.categoryId] || '未分類';
+      const excl    = !!entry.excluded;
       html += `
-        <div class="detail-entry">
+        <div class="detail-entry${excl ? ' excluded' : ''}">
+          <button class="detail-excl-btn${excl ? ' is-excluded' : ''}"
+                  onclick="Detail.toggleExclude('${entry.id}')"
+                  title="${excl ? 'クリックで計算に含む' : 'クリックで除外'}">
+            <svg viewBox="0 0 24 24" fill="currentColor">${excl ? ICON_CHECKED : ICON_UNCHECKED}</svg>
+          </button>
           <span class="detail-entry-day">${entry.day}</span>
           <div class="detail-entry-info">
             <div class="detail-entry-item">${escHtml(entry.item)}</div>
@@ -337,7 +352,7 @@ const Detail = (() => {
         </div>
         <div class="form-group">
           <label class="form-label">金額</label>
-          <input id="edit-amount" class="form-input" type="number" min="0"
+          <input id="edit-amount" class="form-input" type="number"
             inputmode="numeric" value="${entry.amount}">
         </div>
         <div class="form-group">
@@ -463,7 +478,7 @@ const Detail = (() => {
     const catId  = document.getElementById('edit-cat').value;
     const [newYear, newMonth] = document.getElementById('edit-month').value.split('-').map(Number);
 
-    if (!day || !item || !amount || !catId) return;
+    if (!day || !item || isNaN(amount) || !catId) return;
 
     const md  = Storage.getMonthData(_year, _month);
     const idx = md.entries.findIndex(e => e.id === id);
@@ -496,6 +511,17 @@ const Detail = (() => {
     md.entries = md.entries.filter(e => e.id !== id);
     Storage.saveMonthData(_year, _month, md);
     _renderList();
+    App.refresh();
+  }
+
+  /* ===== 除外トグル ===== */
+  function toggleExclude(id) {
+    const md    = Storage.getMonthData(_year, _month);
+    const entry = md.entries.find(e => e.id === id);
+    if (entry) entry.excluded = !entry.excluded;
+    Storage.saveMonthData(_year, _month, md);
+    _renderList();
+    App.refresh();
   }
 
   /* ===== オートコンプリート ===== */
@@ -542,6 +568,7 @@ const Detail = (() => {
     openEditEntry,
     _saveEditEntry,
     deleteEntry,
+    toggleExclude,
     _selectSuggestion,
     _setSort
   };

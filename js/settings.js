@@ -176,7 +176,7 @@ const Settings = (() => {
       </div>
       <div class="form-group">
         <label class="form-label">金額（¥）</label>
-        <input id="inc-amount" class="form-input" type="number" min="0"
+        <input id="inc-amount" class="form-input" type="number"
           inputmode="numeric" placeholder="0">
       </div>
       <div class="modal-btns">
@@ -194,7 +194,7 @@ const Settings = (() => {
   function _saveIncomeAdd(year, month) {
     const label  = (document.getElementById('inc-label').value  || '').trim();
     const amount = parseInt(document.getElementById('inc-amount').value) || 0;
-    if (!label || amount < 0) return;
+    if (!label) return;
 
     const md = Storage.getMonthData(year, month);
     md.income.push({ id: Storage.genId(), label, amount });
@@ -215,7 +215,7 @@ const Settings = (() => {
       </div>
       <div class="form-group">
         <label class="form-label">金額（¥）</label>
-        <input id="inc-amount" class="form-input" type="number" min="0"
+        <input id="inc-amount" class="form-input" type="number"
           inputmode="numeric" value="${inc.amount}">
       </div>
       <div class="modal-btns">
@@ -233,7 +233,7 @@ const Settings = (() => {
   function _saveIncomeEdit(id, year, month) {
     const label  = (document.getElementById('inc-label').value  || '').trim();
     const amount = parseInt(document.getElementById('inc-amount').value) || 0;
-    if (!label || amount < 0) return;
+    if (!label) return;
 
     const md  = Storage.getMonthData(year, month);
     const idx = md.income.findIndex(i => i.id === id);
@@ -263,7 +263,7 @@ const Settings = (() => {
       </div>
       <div class="form-group">
         <label class="form-label">金額（¥）</label>
-        <input id="base-amount" class="form-input" type="number" min="0"
+        <input id="base-amount" class="form-input" type="number"
           inputmode="numeric" placeholder="0">
       </div>
       <div class="modal-btns">
@@ -281,7 +281,7 @@ const Settings = (() => {
   function _saveBaseItemAdd(year, month) {
     const label  = (document.getElementById('base-label')?.value  || '').trim();
     const amount = parseInt(document.getElementById('base-amount')?.value) || 0;
-    if (!label || amount < 0) return;
+    if (!label) return;
 
     const md = Storage.getMonthData(year, month);
     if (!md.baseIncomeItems) md.baseIncomeItems = [];
@@ -318,7 +318,7 @@ const Settings = (() => {
       </div>
       <div class="form-group">
         <label class="form-label">金額（¥）</label>
-        <input id="base-amount" class="form-input" type="number" min="0"
+        <input id="base-amount" class="form-input" type="number"
           inputmode="numeric" value="${item.amount}">
       </div>
       <div class="modal-btns">
@@ -336,7 +336,7 @@ const Settings = (() => {
   function _saveBaseItemEdit(id, year, month) {
     const label  = (document.getElementById('base-label')?.value  || '').trim();
     const amount = parseInt(document.getElementById('base-amount')?.value) || 0;
-    if (!label || amount < 0) return;
+    if (!label) return;
 
     const md  = Storage.getMonthData(year, month);
     const idx = (md.baseIncomeItems || []).findIndex(b => b.id === id);
@@ -378,7 +378,7 @@ const Settings = (() => {
       </div>
       <div class="form-group">
         <label class="form-label">金額（¥）</label>
-        <input id="fix-amount" class="form-input" type="number" min="0"
+        <input id="fix-amount" class="form-input" type="number"
           inputmode="numeric" placeholder="0">
       </div>
       <p style="font-size:12px;color:var(--clr-text-sub);margin-top:8px">
@@ -399,7 +399,7 @@ const Settings = (() => {
   function _saveFixedAdd(year, month) {
     const label  = (document.getElementById('fix-label').value  || '').trim();
     const amount = parseInt(document.getElementById('fix-amount').value) || 0;
-    if (!label || amount < 0) return;
+    if (!label) return;
 
     const md = Storage.getMonthData(year, month);
     md.fixedCosts.push({ id: Storage.genId(), label, amount });
@@ -420,7 +420,7 @@ const Settings = (() => {
       </div>
       <div class="form-group">
         <label class="form-label">金額（¥）</label>
-        <input id="fix-amount" class="form-input" type="number" min="0"
+        <input id="fix-amount" class="form-input" type="number"
           inputmode="numeric" value="${fix.amount}">
       </div>
       <div class="modal-btns">
@@ -438,7 +438,7 @@ const Settings = (() => {
   function _saveFixedEdit(id, year, month) {
     const label  = (document.getElementById('fix-label').value  || '').trim();
     const amount = parseInt(document.getElementById('fix-amount').value) || 0;
-    if (!label || amount < 0) return;
+    if (!label) return;
 
     const md  = Storage.getMonthData(year, month);
     const idx = md.fixedCosts.findIndex(f => f.id === id);

@@ -26,7 +26,8 @@ const Overview = (() => {
 
     // 予算 = 区分別合計のみ（固定費を除く）
     const budgetTotal    = catBudgetTotal;
-    const entriesTotal   = md.entries.reduce((s, e) => s + e.amount, 0);
+    const activeEntries  = md.entries.filter(e => !e.excluded);
+    const entriesTotal   = activeEntries.reduce((s, e) => s + e.amount, 0);
     const expenseNoFixed = entriesTotal;             // 支出（固定費を除く）
     const expenseTotal   = entriesTotal + fixedTotal; // 支出（固定費を含む）
     const remaining      = budgetTotal - expenseNoFixed;
@@ -34,7 +35,7 @@ const Overview = (() => {
 
     const catStats = cats.map(c => {
       const budget  = md.budgets[c.id] || 0;
-      const expense = md.entries
+      const expense = activeEntries
         .filter(e => e.categoryId === c.id)
         .reduce((s, e) => s + e.amount, 0);
       return { id: c.id, name: c.name, budget, expense, remaining: budget - expense };

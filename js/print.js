@@ -22,6 +22,7 @@ const Print = (() => {
   /* ===== アクションボタン ===== */
   function _renderActionsBar(year, month) {
     const sorts = [
+      { key: 'input',    label: '入力順' },
       { key: 'date',     label: '日付順' },
       { key: 'item',     label: '項目順' },
       { key: 'category', label: '区分順' },
@@ -127,15 +128,16 @@ const Print = (() => {
      ===================================================== */
   function _buildPage1(year, month, md, cats) {
     /* ---- 数値計算 ---- */
+    const activeEntries  = md.entries.filter(e => !e.excluded);
     const incomeTotal    = md.income.reduce((s, i) => s + i.amount, 0);
     const fixedTotal     = md.fixedCosts.reduce((s, f) => s + f.amount, 0);
     const catBudget      = cats.reduce((s, c) => s + (md.budgets[c.id] || 0), 0);
-    const budgetTotal    = catBudget;                  // 固定費を除く
-    const entriesSum     = md.entries.reduce((s, e) => s + e.amount, 0);
-    const expenseNoFixed = entriesSum;                 // 支出（固定費を除く）
-    const expenseTotal   = entriesSum + fixedTotal;    // 支出（固定費を含む）
+    const budgetTotal    = catBudget;                        // 固定費を除く
+    const entriesSum     = activeEntries.reduce((s, e) => s + e.amount, 0);
+    const expenseNoFixed = entriesSum;                       // 支出（固定費を除く）
+    const expenseTotal   = entriesSum + fixedTotal;          // 支出（固定費を含む）
     const remaining      = budgetTotal - expenseNoFixed;
-    const markedDays     = [...new Set(md.entries.map(e => e.day))];
+    const markedDays     = [...new Set(activeEntries.map(e => e.day))];
 
     /* ---- 予算超過カラー ---- */
     const budgetColor  = budgetTotal > incomeTotal ? '#DC2626' : '#1C1917';
@@ -145,7 +147,7 @@ const Print = (() => {
     let catBudgetSum = 0, catExpenseSum = 0;
     const catRows = cats.map(c => {
       const b  = md.budgets[c.id] || 0;
-      const ex = md.entries.filter(e => e.categoryId === c.id).reduce((s, e) => s + e.amount, 0);
+      const ex = activeEntries.filter(e => e.categoryId === c.id).reduce((s, e) => s + e.amount, 0);
       const r  = b - ex;
       catBudgetSum  += b;
       catExpenseSum += ex;
@@ -268,20 +270,23 @@ const Print = (() => {
      ===================================================== */
   function _buildPage2(year, month, md, cats) {
     const catMap = Object.fromEntries(cats.map(c => [c.id, c.name]));
+    const active = md.entries.filter(e => !e.excluded);
 
     let sorted;
-    if (_sortOrder === 'item') {
-      sorted = [...md.entries].sort((a, b) =>
+    if (_sortOrder === 'input') {
+      sorted = [...active];
+    } else if (_sortOrder === 'item') {
+      sorted = [...active].sort((a, b) =>
         a.item.localeCompare(b.item, 'ja') || a.day - b.day
       );
     } else if (_sortOrder === 'category') {
-      sorted = [...md.entries].sort((a, b) => {
+      sorted = [...active].sort((a, b) => {
         const ca = catMap[a.categoryId] || '￿';
         const cb = catMap[b.categoryId] || '￿';
         return ca.localeCompare(cb, 'ja') || a.day - b.day;
       });
     } else {
-      sorted = [...md.entries].sort((a, b) => a.day - b.day);
+      sorted = [...active].sort((a, b) => a.day - b.day);
     }
 
     const total  = sorted.reduce((s, e) => s + e.amount, 0);
