@@ -141,6 +141,10 @@
   white-space: nowrap;
 }
 
+.detail-entry-amount.amount-negative {
+  color: var(--clr-danger);
+}
+
 .detail-entry-actions {
   display: flex;
   gap: 2px;

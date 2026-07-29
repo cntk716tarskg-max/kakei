@@ -7,7 +7,9 @@ const Detail = (() => {
   let _year, _month;
   let _lastDay = null;   // 最後に入力した日を記憶して連続入力を助ける
   let _catBuffer = '';   // 区分の数字入力バッファ
-  let _sortMode = 'date'; // 並び替えモード: 'date' | 'item' | 'cat'
+  let _sortMode = 'input'; // 並び替えモード: 'input' | 'date' | 'item' | 'cat'
+  let _inputDir = 'desc'; // 'desc'=新→旧 | 'asc'=旧→新
+  let _dateDir  = 'asc';  // 'asc'=月初上 | 'desc'=月末上
 
   /* ===== メインレンダリング ===== */
   function render(year, month) {
@@ -213,7 +215,12 @@ const Detail = (() => {
 
   /* ===== 並び替えモード変更 ===== */
   function _setSort(mode) {
-    _sortMode = mode;
+    if (mode === _sortMode) {
+      if (mode === 'input') _inputDir = _inputDir === 'desc' ? 'asc' : 'desc';
+      if (mode === 'date')  _dateDir  = _dateDir  === 'desc' ? 'asc' : 'desc';
+    } else {
+      _sortMode = mode;
+    }
     _renderList();
   }
 
@@ -224,10 +231,13 @@ const Detail = (() => {
     const catMap = Object.fromEntries(cats.map(c => [c.id, c.name]));
     const el     = document.getElementById('detail-list-section');
 
+    const inputLabel = `入力順${_sortMode === 'input' ? (_inputDir === 'desc' ? ' ↓' : ' ↑') : ''}`;
+    const dateLabel  = `日付順${_sortMode === 'date'  ? (_dateDir  === 'asc'  ? ' ↑' : ' ↓') : ''}`;
+
     const sortBar = `
       <div class="detail-sort-bar">
-        <button class="detail-sort-btn${_sortMode === 'input' ? ' active' : ''}" onclick="Detail._setSort('input')">入力順</button>
-        <button class="detail-sort-btn${_sortMode === 'date'  ? ' active' : ''}" onclick="Detail._setSort('date')">日付順</button>
+        <button class="detail-sort-btn${_sortMode === 'input' ? ' active' : ''}" onclick="Detail._setSort('input')" title="${_sortMode === 'input' ? (_inputDir === 'desc' ? 'クリックで古い順' : 'クリックで新しい順') : '新しい順'}">${inputLabel}</button>
+        <button class="detail-sort-btn${_sortMode === 'date'  ? ' active' : ''}" onclick="Detail._setSort('date')"  title="${_sortMode === 'date'  ? (_dateDir  === 'asc'  ? 'クリックで月末が上' : 'クリックで月初が上') : '日付順'}">${dateLabel}</button>
         <button class="detail-sort-btn${_sortMode === 'item'  ? ' active' : ''}" onclick="Detail._setSort('item')">項目順</button>
         <button class="detail-sort-btn${_sortMode === 'cat'   ? ' active' : ''}" onclick="Detail._setSort('cat')">区分順</button>
       </div>`;
@@ -246,7 +256,8 @@ const Detail = (() => {
     let getGroup;
 
     if (_sortMode === 'input') {
-      getGroup = () => null; // グループなし
+      if (_inputDir === 'desc') sorted.reverse(); // 新しい順（最後に追加したものが先頭）
+      getGroup = () => null;
     } else if (_sortMode === 'item') {
       sorted.sort((a, b) => a.item.localeCompare(b.item, 'ja') || a.day - b.day);
       getGroup = e => escHtml(e.item);
@@ -256,8 +267,12 @@ const Detail = (() => {
         (catOrder[a.categoryId] ?? 999) - (catOrder[b.categoryId] ?? 999) || a.day - b.day
       );
       getGroup = e => escHtml(catMap[e.categoryId] || '未分類');
-    } else {
-      sorted.sort((a, b) => a.day - b.day);
+    } else { // date
+      if (_dateDir === 'asc') {
+        sorted.sort((a, b) => a.day - b.day); // 月初が上
+      } else {
+        sorted.sort((a, b) => b.day - a.day); // 月末が上
+      }
       getGroup = e => `${e.day}日`;
     }
 
@@ -294,7 +309,7 @@ const Detail = (() => {
             <div class="detail-entry-item">${escHtml(entry.item)}</div>
             <div class="detail-entry-cat">${escHtml(catName)}</div>
           </div>
-          <span class="detail-entry-amount">${formatCurrency(entry.amount)}</span>
+          <span class="detail-entry-amount${entry.amount < 0 ? ' amount-negative' : ''}">${formatCurrency(entry.amount)}</span>
           <div class="detail-entry-actions">
             <button class="btn-icon-sm" onclick="Detail.openEditEntry('${entry.id}')" title="編集">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
